@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Confirm Selected Players</title>
+  <style>
+    body {
+      background-color: #222;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 { margin-bottom: 20px; }
+    ul {
+      list-style: none;
+      padding: 0;
+      width: 300px;
+      margin: 0 auto 20px;
+    }
+    li {
+      background-color: #333;
+      padding: 10px;
+      margin: 5px 0;
+      border: 1px solid #555;
+      border-radius: 5px;
+    }
+    .button-container { margin-top: 20px; }
+    button {
+      background-color: #0055ff;
+      border: none;
+      color: #fff;
+      padding: 10px 20px;
+      margin: 0 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button#back-btn { background-color: #ff5555; }
+  </style>
+</head>
+<body>
+  <h1>Confirm Selected Players</h1>
+  <p>You have selected the following players:</p>
+  <ul id="selected-players">
+    <li>Loading players...</li>
+  </ul>
+  <p>Are you sure you want to see these players' stats?</p>
+  <div class="button-container">
+    <button id="continue-btn">Continue</button>
+    <button id="back-btn">Back</button>
+  </div>
+  
+  <script>
+    // Function to parse URL query parameters into an object.
+    function getQueryParams() {
+      const params = {};
+      window.location.search.substring(1)
+        .split("&")
+        .forEach(pair => {
+          const [key, value] = pair.split("=");
+          if (key) params[key] = decodeURIComponent(value);
+        });
+      return params;
+    }
+    
+    const params = getQueryParams();
+    let selectedPlayers = [];
+    if (params.players) {
+      try {
+        selectedPlayers = JSON.parse(params.players);
+      } catch (e) {
+        console.error("Error parsing selected players:", e);
+      }
+    }
+    
+    const ul = document.getElementById("selected-players");
+    ul.innerHTML = "";
+    if (selectedPlayers.length === 0) {
+      ul.innerHTML = "<li>No players selected.</li>";
+    } else {
+      selectedPlayers.forEach(player => {
+        const li = document.createElement("li");
+        li.textContent = player;
+        ul.appendChild(li);
+      });
+    }
+    
+    // When Continue is clicked, send the selected players (as JSON) to player-cards.html.
+    document.getElementById("continue-btn").addEventListener("click", () => {
+      const queryString = "players=" + encodeURIComponent(JSON.stringify(selectedPlayers));
+      window.location.href = "player-cards.html?" + queryString;
+    });
+    
+    // When Back is clicked, go back to the selection page (index.html).
+    document.getElementById("back-btn").addEventListener("click", () => {
+      window.location.href = "index.html";
+    });
+  </script>
+</body>
+</html>

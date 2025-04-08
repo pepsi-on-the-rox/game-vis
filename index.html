@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Select up to 5 Players</title>
+  <style>
+    body {
+      background-color: #222;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    .player-menu {
+      width: 300px;
+      background-color: #333;
+      border: 1px solid #555;
+      border-radius: 5px;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+    .player-menu label {
+      display: block;
+      margin-bottom: 5px;
+      cursor: pointer;
+    }
+    .submit-btn {
+      background-color: #0055ff;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Select up to 5 Players</h1>
+  <div id="player-menu" class="player-menu">
+    <p>Loading players…</p>
+  </div>
+  <button id="submit-btn" class="submit-btn">Display Stats</button>
+  
+  <script>
+    // Fetch the CSV to extract unique player names.
+    fetch("datasets/excali8ur-plays-2025-03-23.csv")
+      .then(response => {
+        if (!response.ok) throw new Error("Network response was not ok: " + response.statusText);
+        return response.text();
+      })
+      .then(csvText => {
+        const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+        if (lines.length < 2) throw new Error("CSV does not contain enough rows.");
+        const headers = lines[0].split(',').map(h => h.trim());
+        // Look for columns with "player" and "name" (ignore "username")
+        const playerIndices = [];
+        headers.forEach((header, idx) => {
+          const lower = header.toLowerCase();
+          if (lower.includes("player") && lower.includes("name") && !lower.includes("username"))
+            playerIndices.push(idx);
+        });
+        const uniquePlayers = new Set();
+        for (let i = 1; i < lines.length; i++) {
+          const cells = lines[i].split(',').map(cell => cell.trim());
+          playerIndices.forEach(idx => {
+            if (cells[idx] && cells[idx] !== "") uniquePlayers.add(cells[idx]);
+          });
+        }
+        const playerMenu = document.getElementById("player-menu");
+        playerMenu.innerHTML = "";
+        if (uniquePlayers.size === 0) {
+          playerMenu.innerHTML = "<p>No player names found.</p>";
+        } else {
+          uniquePlayers.forEach(player => {
+            const label = document.createElement("label");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = player;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(" " + player));
+            playerMenu.appendChild(label);
+          });
+          // Limit selection to 5
+          const checkboxes = playerMenu.querySelectorAll("input[type=checkbox]");
+          checkboxes.forEach(chk => {
+            chk.addEventListener("change", () => {
+              const selected = playerMenu.querySelectorAll("input[type=checkbox]:checked");
+              if (selected.length > 5) {
+                alert("You can only select up to 5 players.");
+                chk.checked = false;
+              }
+            });
+          });
+        }
+      })
+      .catch(error => {
+        console.error("Error loading CSV data:", error);
+        document.getElementById("player-menu").innerHTML = `<p>Error loading players: ${error.message}</p>`;
+      });
+    
+    // When button clicked, pass selected players to confirmation page.
+    document.getElementById("submit-btn").addEventListener("click", () => {
+      const selected = Array.from(document.querySelectorAll("#player-menu input[type=checkbox]:checked"))
+                            .map(chk => chk.value);
+      const queryString = "players=" + encodeURIComponent(JSON.stringify(selected));
+      window.location.href = "player-stats.html?" + queryString;
+    });
+  </script>
+</body>
+</html>
