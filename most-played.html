@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Top 5 Most Played Games</title>
+  <style>
+    body {
+      background-color: #222;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 80%;
+      max-width: 800px;
+      margin: 0 auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #555;
+    }
+    th {
+      background-color: #333;
+    }
+    td {
+      background-color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Top 5 Most Played Games</h1>
+  <div id="result">
+    <p>Loading game stats...</p>
+  </div>
+  
+  <script>
+    // Fetch the CSV file from the "datasets" folder.
+    fetch("datasets/excali8ur-plays-2025-03-23.csv")
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("Network error: " + response.statusText);
+        }
+        return response.text();
+      })
+      .then(csvText => {
+        // Split the CSV text into lines and filter out empty lines.
+        const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+        if (lines.length < 2) {
+          throw new Error("CSV does not have enough rows.");
+        }
+        
+        // Parse the header row.
+        const headers = lines[0].split(',').map(h => h.trim());
+        console.log("Headers:", headers);
+        
+        // Determine which column to use as the unique game identifier.
+        // We first try to find "Game Name", falling back to "Play ID" if not found.
+        let gameNameIndex = headers.findIndex(h => h.toLowerCase().includes("game name"));
+        let playIdIndex = headers.findIndex(h => h.toLowerCase().includes("play id"));
+        const gameIdIndex = gameNameIndex !== -1 ? gameNameIndex : (playIdIndex !== -1 ? playIdIndex : -1);
+        if (gameIdIndex === -1) {
+          throw new Error("No game identifier column (Game Name or Play ID) found.");
+        }
+        
+        // Determine which columns hold player names.
+        // Include columns that have "player" and "name" (excluding columns with "username").
+        const playerIndices = [];
+        headers.forEach((header, idx) => {
+          const lower = header.toLowerCase();
+          if (lower.includes("player") && lower.includes("name") && !lower.includes("username")) {
+            playerIndices.push(idx);
+          }
+        });
+        console.log("Player Name column indices:", playerIndices);
+        
+        // Create an object to hold game stats.
+        // For each game, we will store { matches: number, uniquePlayers: Set() }.
+        const gameStats = {};
+        for (let i = 1; i < lines.length; i++) {
+          const cells = lines[i].split(',').map(cell => cell.trim());
+          if (cells.length <= gameIdIndex) continue;
+          let gameId = cells[gameIdIndex].replace(/^"(.*)"$/, '$1').trim();
+          if (!gameId) continue; // Skip rows with an empty game identifier.
+          if (!gameStats[gameId]) {
+            gameStats[gameId] = { matches: 0, uniquePlayers: new Set() };
+          }
+          gameStats[gameId].matches++;
+          // For each player name column, add the player's name to the set.
+          playerIndices.forEach(idx => {
+            if (cells[idx]) {
+              let playerName = cells[idx].replace(/^"(.*)"$/, '$1').trim();
+              if (playerName) {
+                gameStats[gameId].uniquePlayers.add(playerName);
+              }
+            }
+          });
+        }
+        console.log("Game Stats:", gameStats);
+        
+        // Convert gameStats object into an array so we can sort it.
+        const gameArray = Object.keys(gameStats).map(game => ({
+          game,
+          matches: gameStats[game].matches,
+          uniquePlayers: gameStats[game].uniquePlayers.size
+        }));
+        
+        // Sort the games by the number of matches (descending).
+        gameArray.sort((a, b) => b.matches - a.matches);
+        
+        // Get the top 5 games.
+        const topGames = gameArray.slice(0, 5);
+        
+        // Build an HTML table to display the results.
+        let tableHTML = `<table>
+          <thead>
+            <tr>
+              <th>Game</th>
+              <th>Total Matches</th>
+              <th>Unique Players</th>
+            </tr>
+          </thead>
+          <tbody>`;
+        topGames.forEach(item => {
+          tableHTML += `<tr>
+            <td>${item.game}</td>
+            <td>${item.matches}</td>
+            <td>${item.uniquePlayers}</td>
+          </tr>`;
+        });
+        tableHTML += "</tbody></table>";
+        
+        document.getElementById("result").innerHTML = tableHTML;
+      })
+      .catch(error => {
+        console.error("Error processing CSV:", error);
+        document.getElementById("result").innerHTML = `<p>Error loading game stats: ${error.message}</p>`;
+      });
+  </script>
+</body>
+</html>

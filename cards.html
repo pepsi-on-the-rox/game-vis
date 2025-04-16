@@ -29,16 +29,16 @@
           <div class="circle top-left">
             <svg viewBox="0 0 100 100">
               <defs>
-                <path id="curveTL${item.wins}/${item.matchCount}" d="M 10,50 A 40,40 0 0,0 90,50" />
+                <path id="curveTL10/40" d="M 10,50 A 40,40 0 0,0 90,50" />
               </defs>
               <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveTL${item.wins}/${item.matchCount}" startOffset="50%" text-anchor="middle">
+                <textPath href="#curveTL10/40" startOffset="50%" text-anchor="middle">
                   Top Left
                 </textPath>
               </text>
               <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
                     text-anchor="middle" dominant-baseline="middle">
-                ${item.wins}/${item.matchCount}
+                10/40
               </text>
             </svg>
           </div>
@@ -47,16 +47,16 @@
           <div class="circle bottom-left">
             <svg viewBox="0 0 100 100">
               <defs>
-                <path id="curveBL${item.uniqueGames}" d="M 10,50 A 40,40 0 0,0 90,50" />
+                <path id="curveBL12" d="M 10,50 A 40,40 0 0,0 90,50" />
               </defs>
               <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveBL${item.uniqueGames}" startOffset="50%" text-anchor="middle">
+                <textPath href="#curveBL12" startOffset="50%" text-anchor="middle">
                   Bottom Left
                 </textPath>
               </text>
               <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
                     text-anchor="middle" dominant-baseline="middle">
-                ${item.uniqueGames}
+                12
               </text>
             </svg>
           </div>
@@ -65,7 +65,7 @@
           <div class="circle bottom-right">
             <svg viewBox="0 0 100 100">
               <defs>
-                <path id="curveBR${i}" d="M 90,50 A 40,40 0 0,0 10,50" />
+                <path id="curveBR12" d="M 90,50 A 40,40 0 0,0 10,50" />
               </defs>
               <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
                 <textPath href="#curveBR${i}" startOffset="50%" text-anchor="middle">
@@ -83,7 +83,7 @@
           <div class="top-rectangle">Top Section</div>
           
           <!-- Field with title -->
-          <div class="field">${item.player}</div>
+          <div class="field">player</div>
           
           <!-- Bottom shape with text description -->
           <div class="bottom-shape">

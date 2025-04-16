@@ -2,45 +2,53 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Player Cards</title>
-  <link rel="stylesheet" href="stylesheets/cards.css">
+  <title>Player Stats Cards</title>
   <style>
-    /* Additional styling for this page */
-    h1 { margin-bottom: 20px; }
-    #cards-container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 20px;
+    body {
+      background-color: #222;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
     }
+    h1 { margin-bottom: 20px; }
+    .card {
+      background-color: #333;
+      border: 2px solid #000;
+      border-radius: 10px;
+      width: 300px;
+      margin: 10px auto;
+      padding: 15px;
+      text-align: left;
+      box-shadow: 2px 2px 10px rgba(0,0,0,0.7);
+    }
+    .card h2 { margin-top: 0; }
+    .card p { margin: 5px 0; }
   </style>
 </head>
 <body>
-  <h1>Player Cards</h1>
+  <h1>Player Stats Cards</h1>
   <div id="cards-container">
     <p>Loading player stats...</p>
   </div>
   
   <script>
-    // Utility function: Parse URL query parameters.
+    // Utility function to parse URL query parameters.
     function getQueryParams() {
       const params = {};
-      window.location.search.substring(1)
-        .split("&")
-        .forEach(pair => {
-          const [key, value] = pair.split("=");
-          if (key) params[key] = decodeURIComponent(value);
-        });
+      window.location.search.substring(1).split("&").forEach(pair => {
+        const [key, value] = pair.split("=");
+        if (key) params[key] = decodeURIComponent(value);
+      });
       return params;
     }
     
-    // Retrieve selected players from query parameter "players".
     const params = getQueryParams();
     let selectedPlayers = [];
     if (params.players) {
       try {
         selectedPlayers = JSON.parse(params.players);
-      } catch (e) {
+      } catch(e) {
         console.error("Error parsing selected players:", e);
       }
     }
@@ -49,31 +57,34 @@
       throw new Error("No players selected");
     }
     
-    // Fetch and process the CSV file.
+    // Fetch the CSV file.
     fetch("datasets/excali8ur-plays-2025-03-23.csv")
       .then(response => {
-        if (!response.ok) throw new Error("Network error: " + response.statusText);
+        if (!response.ok) {
+          throw new Error("Network error: " + response.statusText);
+        }
         return response.text();
       })
       .then(csvText => {
+        // Split CSV text into lines.
         const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
         if (lines.length < 2) throw new Error("CSV doesn't have data rows.");
         const headers = lines[0].split(',').map(h => h.trim());
         console.log("Headers:", headers);
         
-        // Determine a unique game identifier column.
+        // Determine the index for a unique game identifier (prefer "Game Name", fallback "Play ID").
         let gameNameIndex = headers.findIndex(h => h.toLowerCase().includes("game name"));
         let playIdIndex = headers.findIndex(h => h.toLowerCase().includes("play id"));
         const gameIdIndex = gameNameIndex !== -1 ? gameNameIndex : (playIdIndex !== -1 ? playIdIndex : -1);
         
-        // Build an array of name/win column pairs.
+        // Build an array of name/win pairs.
         const pairs = [];
         headers.forEach((header, idx) => {
           const nameMatch = header.match(/player\s*(\d+)\s*name/i);
           if (nameMatch && !header.toLowerCase().includes("username")) {
             const num = nameMatch[1];
-            const winIndex = headers.findIndex(h => h.toLowerCase().includes("player") &&
-                                                       h.toLowerCase().includes(num) &&
+            const winIndex = headers.findIndex(h => h.toLowerCase().includes("player") && 
+                                                       h.toLowerCase().includes(num) && 
                                                        h.toLowerCase().includes("win"));
             if (winIndex !== -1) {
               pairs.push({ nameIndex: idx, winIndex: winIndex });
@@ -83,17 +94,22 @@
         console.log("Name/Win pairs:", pairs);
         
         // Initialize a stats object for each selected player.
+        // For each selected player, we'll track:
+        // - matchCount: the total rows (games) they appear in.
+        // - wins: the total wins (from the corresponding win columns).
+        // - uniqueGames: a Set of game identifiers.
+        // - rivalStats: an object that records, for each opponent, the number of games and wins.
         const stats = {};
         selectedPlayers.forEach(player => {
           stats[player] = { matchCount: 0, wins: 0, uniqueGames: new Set(), rivalStats: {} };
         });
         
-        // Process each data row (skip header row).
+        // Process each data row.
         for (let i = 1; i < lines.length; i++) {
           const cells = lines[i].split(',').map(cell => cell.trim());
           selectedPlayers.forEach(player => {
             let found = false;
-            let winVal = "0";  // Defaults to loss if not "1"
+            let winVal = "0";
             const opponentsInRow = new Set();
             pairs.forEach(pair => {
               let nameVal = cells[pair.nameIndex] ? cells[pair.nameIndex].replace(/^"(.*)"$/, '$1').trim() : "";
@@ -107,9 +123,7 @@
             });
             if (found) {
               stats[player].matchCount++;
-              if (winVal === "1") {
-                stats[player].wins++;
-              }
+              if (winVal === "1") stats[player].wins++;
               if (gameIdIndex !== -1 && cells[gameIdIndex]) {
                 let gameId = cells[gameIdIndex].replace(/^"(.*)"$/, '$1').trim();
                 stats[player].uniqueGames.add(gameId);
@@ -129,7 +143,7 @@
           });
         }
         
-        // Build a stats array for easier card creation.
+        // Build a stats array for each selected player.
         const statsArray = [];
         selectedPlayers.forEach(player => {
           const s = stats[player];
@@ -145,8 +159,9 @@
             }
           }
           let rivalDescription = biggestRival 
-            ? `${player}'s biggest rival is ${biggestRival}. Out of ${maxRivalGames} games, ${player} has won ${((rivalWins/maxRivalGames)*100).toFixed(1)}% against them.`
+            ? `${player}'s biggest rival is ${biggestRival}. Out of ${maxRivalGames} games, ${player} has won ${biggestRival ? ((rivalWins/maxRivalGames)*100).toFixed(1) : 0}% against them.`
             : "No rival data available.";
+          
           statsArray.push({
             player: player,
             matchCount: s.matchCount,
@@ -157,96 +172,19 @@
         });
         console.log("Stats Array:", statsArray);
         
-        // Helper function: Create an inline SVG circle with a label and a number.
-        function createCircleSVG(label, number) {
-          return `
-            <svg viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="45" stroke="#000" stroke-width="2" fill="#ccc"></circle>
-              <text x="50%" y="35" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="#000">
-                ${label}
-              </text>
-              <text x="50%" y="65" text-anchor="middle" dominant-baseline="middle" font-size="20" fill="#000">
-                ${number}
-              </text>
-            </svg>
-          `;
-        }
-        
-        // Display a card for each selected player.
+        // Display the stats.
         const container = document.getElementById("cards-container");
         container.innerHTML = "";
-        statsArray.forEach((item, i) => {
-          const cardHTML = `
+        statsArray.forEach(item => {
+          container.innerHTML += `
             <div class="card">
-          <!-- Top-left circle with curved text and centered number -->
-          <div class="circle top-left">
-            <svg viewBox="0 0 100 100">
-              <defs>
-                <path id="curveTL${item.wins}/${item.matchCount}" d="M 10,50 A 40,40 0 0,0 90,50" />
-              </defs>
-              <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveTL${item.wins}/${item.matchCount}" startOffset="50%" text-anchor="middle">
-                  Top Left
-                </textPath>
-              </text>
-              <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
-                    text-anchor="middle" dominant-baseline="middle">
-                ${item.wins}/${item.matchCount}
-              </text>
-            </svg>
-          </div>
-          
-          <!-- Bottom-left circle with curved text and centered number -->
-          <div class="circle bottom-left">
-            <svg viewBox="0 0 100 100">
-              <defs>
-                <path id="curveBL${item.uniqueGames}" d="M 10,50 A 40,40 0 0,0 90,50" />
-              </defs>
-              <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveBL${item.uniqueGames}" startOffset="50%" text-anchor="middle">
-                  Bottom Left
-                </textPath>
-              </text>
-              <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
-                    text-anchor="middle" dominant-baseline="middle">
-                ${item.uniqueGames}
-              </text>
-            </svg>
-          </div>
-          
-          <!-- Bottom-right circle with curved text and centered number -->
-          <div class="circle bottom-right">
-            <svg viewBox="0 0 100 100">
-              <defs>
-                <path id="curveBR${i}" d="M 90,50 A 40,40 0 0,0 10,50" />
-              </defs>
-              <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveBR${i}" startOffset="50%" text-anchor="middle">
-                  Bottom Right
-                </textPath>
-              </text>
-              <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
-                    text-anchor="middle" dominant-baseline="middle">
-                ${i}
-              </text>
-            </svg>
-          </div>
-          
-          <!-- Top rectangle -->
-          <div class="top-rectangle">Top Section</div>
-          
-          <!-- Field with title -->
-          <div class="field">${item.player}</div>
-          
-          <!-- Bottom shape with text description -->
-          <div class="bottom-shape">
-            <p class="description" style="text-align: center; margin: 10px;">
-              This is a description text for the card.
-            </p>
-          </div>
-        </div>
-      `;
-          container.innerHTML += cardHTML;
+              <h2>${item.player}</h2>
+              <p><strong>Matches:</strong> ${item.matchCount}</p>
+              <p><strong>Wins:</strong> ${item.wins}</p>
+              <p><strong>Unique Games:</strong> ${item.uniqueGames}</p>
+              <p><strong>Description:</strong> ${item.description}</p>
+            </div>
+          `;
         });
       })
       .catch(error => {
