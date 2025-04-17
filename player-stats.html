@@ -12,6 +12,7 @@
       text-align: center;
     }
     h1 { margin-bottom: 20px; }
+    h2 { margin-bottom: 10px; }
     ul {
       list-style: none;
       padding: 0;
@@ -37,14 +38,36 @@
       cursor: pointer;
     }
     button#back-btn { background-color: #ff5555; }
+    table {
+      width: 80%;
+      max-width: 600px;
+      margin: 0 auto 20px;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #555;
+    }
+    th {
+      background-color: #333;
+    }
+    td {
+      background-color: #444;
+    }
   </style>
 </head>
 <body>
   <h1>Confirm Selected Players</h1>
   <p>You have selected the following players:</p>
   <ul id="selected-players">
-    <li>Loading players...</li>
+    <li>Loading players…</li>
   </ul>
+  
+  <h2>Player Stats</h2>
+  <div id="player-stats">
+    <p>Loading player stats…</p>
+  </div>
+  
   <p>Are you sure you want to see these players' stats?</p>
   <div class="button-container">
     <button id="continue-btn">Continue</button>
@@ -52,7 +75,7 @@
   </div>
   
   <script>
-    // Function to parse URL query parameters into an object.
+    // Parse URL query parameters into an object.
     function getQueryParams() {
       const params = {};
       window.location.search.substring(1)
@@ -74,6 +97,7 @@
       }
     }
     
+    // Populate the selected players list.
     const ul = document.getElementById("selected-players");
     ul.innerHTML = "";
     if (selectedPlayers.length === 0) {
@@ -86,13 +110,68 @@
       });
     }
     
-    // When Continue is clicked, send the selected players (as JSON) to player-cards.html.
+    // Fetch the fixed Excalibur JSON file instead of the CSV.
+    fetch("datasets/fixed-excali8ur-plays-2025-03-23.json")
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("Network response was not ok: " + response.statusText);
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Build stats for each selected player.
+        const stats = {};
+        // Initialize stats for each selected player.
+        selectedPlayers.forEach(player => {
+          stats[player] = { plays: 0 };
+        });
+        
+        // Process each record in the JSON.
+        data.forEach(record => {
+          Object.keys(record).forEach(key => {
+            const lowerKey = key.toLowerCase();
+            // Identify keys that likely store a player name.
+            if (lowerKey.includes("player") && lowerKey.includes("name") && !lowerKey.includes("username")) {
+              const nameVal = record[key].trim();
+              if (selectedPlayers.includes(nameVal)) {
+                // Increase the play count if the record includes the selected player's name.
+                stats[nameVal].plays++;
+              }
+            }
+          });
+        });
+        
+        // Build an HTML table for player stats.
+        let tableHTML = `<table>
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Total Plays</th>
+            </tr>
+          </thead>
+          <tbody>`;
+          
+        selectedPlayers.forEach(player => {
+          tableHTML += `<tr>
+            <td>${player}</td>
+            <td>${stats[player] ? stats[player].plays : 0}</td>
+          </tr>`;
+        });
+        tableHTML += `</tbody></table>`;
+        
+        document.getElementById("player-stats").innerHTML = tableHTML;
+      })
+      .catch(error => {
+        document.getElementById("player-stats").innerHTML = `<p>Error loading player stats: ${error.message}</p>`;
+      });
+    
+    // When "Continue" is clicked, pass the selected players to player-cards.html.
     document.getElementById("continue-btn").addEventListener("click", () => {
       const queryString = "players=" + encodeURIComponent(JSON.stringify(selectedPlayers));
       window.location.href = "player-cards.html?" + queryString;
     });
     
-    // When Back is clicked, go back to the selection page (index.html).
+    // When "Back" is clicked, return to the selection page.
     document.getElementById("back-btn").addEventListener("click", () => {
       window.location.href = "index.html";
     });

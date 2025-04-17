@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Top 5 Most Played Games (Last 2 Months) with Total Plays</title>
+  <style>
+    body {
+      background-color: #222;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 80%;
+      max-width: 800px;
+      margin: 0 auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #555;
+    }
+    th {
+      background-color: #333;
+    }
+    td {
+      background-color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Top 5 Most Played Games (Last 2 Months)</h1>
+  <div id="result">
+    <p>Loading game stats...</p>
+  </div>
+
+  <script>
+    // Fetch the CSV file from the datasets folder.
+    fetch("datasets/excali8ur-plays-2025-03-23.csv")
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("Network error: " + response.statusText);
+        }
+        return response.text();
+      })
+      .then(csvText => {
+        // Split CSV text into lines and remove any empty lines.
+        const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+        if (lines.length < 2) {
+          throw new Error("CSV does not have enough rows.");
+        }
+
+        // Parse the header row.
+        const headers = lines[0].split(',').map(h => h.trim());
+
+        // Identify the game identifier column.
+        // Try "Game Name" first; if not available, fall back to "Play ID".
+        let gameNameIndex = headers.findIndex(h => h.toLowerCase().includes("game name"));
+        let playIdIndex = headers.findIndex(h => h.toLowerCase().includes("play id"));
+        const gameIdIndex = gameNameIndex !== -1 ? gameNameIndex : (playIdIndex !== -1 ? playIdIndex : -1);
+        if (gameIdIndex === -1) {
+          throw new Error("No game identifier column (Game Name or Play ID) found.");
+        }
+
+        // Identify the DATE column (exactly named "DATE" regardless of case).
+        let dateIndex = headers.findIndex(h => h.trim().toLowerCase() === "date");
+        if (dateIndex === -1) {
+          throw new Error("CSV does not contain a DATE column.");
+        }
+
+        // First pass: determine the maximum date in the CSV.
+        let maxDate = new Date(0);
+        for (let i = 1; i < lines.length; i++) {
+          const cells = lines[i].split(',').map(cell => cell.trim());
+          if (cells.length <= dateIndex) continue;
+          let dateStr = cells[dateIndex].replace(/^"(.*)"$/, '$1').trim();
+          let entryDate = new Date(dateStr);
+          if (entryDate > maxDate) {
+            maxDate = entryDate;
+          }
+        }
+        
+        // Define the two periods.
+        // "Recent" is the last 2 months from maxDate.
+        let recentStart = new Date(maxDate);
+        recentStart.setMonth(recentStart.getMonth() - 2);
+        // "Previous" is the 2-month period immediately before "Recent".
+        let previousStart = new Date(maxDate);
+        previousStart.setMonth(previousStart.getMonth() - 4);
+        let previousEnd = new Date(recentStart);
+
+        // Second pass: tally the number of plays per game for both periods.
+        let gameTrends = {};  // Structure: { [game]: { recent: count, previous: count } }
+        for (let i = 1; i < lines.length; i++) {
+          const cells = lines[i].split(',').map(cell => cell.trim());
+          if (cells.length <= gameIdIndex || cells.length <= dateIndex) continue;
+          let game = cells[gameIdIndex].replace(/^"(.*)"$/, '$1').trim();
+          let dateStr = cells[dateIndex].replace(/^"(.*)"$/, '$1').trim();
+          let entryDate = new Date(dateStr);
+          if (!gameTrends[game]) {
+            gameTrends[game] = { recent: 0, previous: 0 };
+          }
+          // Count for Recent period.
+          if (entryDate >= recentStart && entryDate <= maxDate) {
+            gameTrends[game].recent++;
+          }
+          // Count for Previous period.
+          else if (entryDate >= previousStart && entryDate < recentStart) {
+            gameTrends[game].previous++;
+          }
+        }
+        
+        // Build an array of games with their counts.
+        // We now add a new property "total" which is the sum of recent and previous plays.
+        let trendingArray = Object.keys(gameTrends).map(game => ({
+          game: game,
+          recent: gameTrends[game].recent,
+          previous: gameTrends[game].previous,
+          total: gameTrends[game].recent + gameTrends[game].previous
+        }));
+
+        // Create two ranking arrays:
+        // Sort by recent plays.
+        let recentRankArray = [...trendingArray].sort((a, b) => b.recent - a.recent);
+        // Sort by previous plays.
+        let previousRankArray = [...trendingArray].sort((a, b) => b.previous - a.previous);
+
+        // Map game to its rank (starting at 1) for each period.
+        let recentRankMapping = {};
+        recentRankArray.forEach((item, index) => {
+          recentRankMapping[item.game] = index + 1;
+        });
+        let previousRankMapping = {};
+        previousRankArray.forEach((item, index) => {
+          previousRankMapping[item.game] = index + 1;
+        });
+
+        // Now select the top 5 games based on recent plays.
+        let topGames = recentRankArray.slice(0, 5);
+
+        // Build the HTML table with an added column for total plays.
+        let tableHTML = `<table>
+          <thead>
+            <tr>
+              <th>Rank (Recent)</th>
+              <th>Game</th>
+              <th>Total Plays</th>
+              <th>Recent Plays<br>(Last 2 Months)</th>
+              <th>Previous Plays<br>(2 Months Prior)</th>
+              <th>Previous Rank<br>(2 Months Ago)</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody>`;
+        topGames.forEach(item => {
+          let currentRank = recentRankMapping[item.game];
+          // Get previous rank; if undefined, show a dash.
+          let previousRank = previousRankMapping[item.game] || "-";
+          
+          // Calculate ranking change.
+          let changeIndicator = "—";
+          if (previousRank !== "-" && typeof previousRank === "number") {
+            let rankChange = previousRank - currentRank;
+            if (rankChange > 0) {
+              changeIndicator = `▲ ${rankChange}`;
+            } else if (rankChange < 0) {
+              changeIndicator = `▼ ${Math.abs(rankChange)}`;
+            }
+          }
+          
+          tableHTML += `<tr>
+            <td>${currentRank}</td>
+            <td>${item.game}</td>
+            <td>${item.total}</td>
+            <td>${item.recent}</td>
+            <td>${item.previous}</td>
+            <td>${previousRank}</td>
+            <td>${changeIndicator}</td>
+          </tr>`;
+        });
+        tableHTML += "</tbody></table>";
+        
+        // Display the table.
+        document.getElementById("result").innerHTML = tableHTML;
+      })
+      .catch(error => {
+        console.error("Error processing CSV:", error);
+        document.getElementById("result").innerHTML = `<p>Error loading game stats: ${error.message}</p>`;
+      });
+  </script>
+</body>
+</html>

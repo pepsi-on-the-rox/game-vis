@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Top 5 Most Played Games</title>
+  <title>Top 5 Most Played Games with Unique Players</title>
   <style>
     body {
       background-color: #222;
@@ -35,110 +35,91 @@
 <body>
   <h1>Top 5 Most Played Games</h1>
   <div id="result">
-    <p>Loading game stats...</p>
+    <p>Loading data...</p>
   </div>
-  
+
   <script>
-    // Fetch the CSV file from the "datasets" folder.
-    fetch("datasets/excali8ur-plays-2025-03-23.csv")
+    // Fetch the fixed JSON file from the datasets folder.
+    fetch("datasets/fixed-excali8ur-plays-2025-03-23.json")
       .then(response => {
         if (!response.ok) {
           throw new Error("Network error: " + response.statusText);
         }
-        return response.text();
+        return response.json();
       })
-      .then(csvText => {
-        // Split the CSV text into lines and filter out empty lines.
-        const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
-        if (lines.length < 2) {
-          throw new Error("CSV does not have enough rows.");
-        }
-        
-        // Parse the header row.
-        const headers = lines[0].split(',').map(h => h.trim());
-        console.log("Headers:", headers);
-        
-        // Determine which column to use as the unique game identifier.
-        // We first try to find "Game Name", falling back to "Play ID" if not found.
-        let gameNameIndex = headers.findIndex(h => h.toLowerCase().includes("game name"));
-        let playIdIndex = headers.findIndex(h => h.toLowerCase().includes("play id"));
-        const gameIdIndex = gameNameIndex !== -1 ? gameNameIndex : (playIdIndex !== -1 ? playIdIndex : -1);
-        if (gameIdIndex === -1) {
-          throw new Error("No game identifier column (Game Name or Play ID) found.");
-        }
-        
-        // Determine which columns hold player names.
-        // Include columns that have "player" and "name" (excluding columns with "username").
-        const playerIndices = [];
-        headers.forEach((header, idx) => {
-          const lower = header.toLowerCase();
-          if (lower.includes("player") && lower.includes("name") && !lower.includes("username")) {
-            playerIndices.push(idx);
+      .then(data => {
+        // Dictionaries for total plays and unique players per game.
+        let gameCounts = {};
+        let gameUniquePlayers = {};
+
+        // Iterate through each play record.
+        data.forEach(item => {
+          // Get the game name from the "\"game name\"" field.
+          let game = item["\"game name\""];
+          if (game) {
+            game = game.trim();
+            // Increment the play count.
+            gameCounts[game] = (gameCounts[game] || 0) + 1;
+            
+            // Initialize the unique players set if not already.
+            if (!gameUniquePlayers[game]) {
+              gameUniquePlayers[game] = new Set();
+            }
+            // Iterate over each key in the record.
+            Object.keys(item).forEach(key => {
+              let lowerKey = key.toLowerCase();
+              // Check for keys that likely hold a player's name.
+              if (lowerKey.includes("player") && lowerKey.includes("name") && !lowerKey.includes("username")) {
+                let playerName = item[key].trim();
+                if (playerName !== "") {
+                  gameUniquePlayers[game].add(playerName);
+                }
+              }
+            });
           }
         });
-        console.log("Player Name column indices:", playerIndices);
         
-        // Create an object to hold game stats.
-        // For each game, we will store { matches: number, uniquePlayers: Set() }.
-        const gameStats = {};
-        for (let i = 1; i < lines.length; i++) {
-          const cells = lines[i].split(',').map(cell => cell.trim());
-          if (cells.length <= gameIdIndex) continue;
-          let gameId = cells[gameIdIndex].replace(/^"(.*)"$/, '$1').trim();
-          if (!gameId) continue; // Skip rows with an empty game identifier.
-          if (!gameStats[gameId]) {
-            gameStats[gameId] = { matches: 0, uniquePlayers: new Set() };
-          }
-          gameStats[gameId].matches++;
-          // For each player name column, add the player's name to the set.
-          playerIndices.forEach(idx => {
-            if (cells[idx]) {
-              let playerName = cells[idx].replace(/^"(.*)"$/, '$1').trim();
-              if (playerName) {
-                gameStats[gameId].uniquePlayers.add(playerName);
-              }
-            }
+        // Convert the total plays object into an array for sorting.
+        let gamesArray = [];
+        for (let game in gameCounts) {
+          gamesArray.push({
+            game: game,
+            count: gameCounts[game],
+            unique: gameUniquePlayers[game].size
           });
         }
-        console.log("Game Stats:", gameStats);
         
-        // Convert gameStats object into an array so we can sort it.
-        const gameArray = Object.keys(gameStats).map(game => ({
-          game,
-          matches: gameStats[game].matches,
-          uniquePlayers: gameStats[game].uniquePlayers.size
-        }));
+        // Sort the array in descending order by total plays.
+        gamesArray.sort((a, b) => b.count - a.count);
         
-        // Sort the games by the number of matches (descending).
-        gameArray.sort((a, b) => b.matches - a.matches);
+        // Select the top 5 games.
+        let topGames = gamesArray.slice(0, 5);
         
-        // Get the top 5 games.
-        const topGames = gameArray.slice(0, 5);
-        
-        // Build an HTML table to display the results.
+        // Build the HTML table with columns: Rank, Game, Total Plays, and Unique Players.
         let tableHTML = `<table>
           <thead>
             <tr>
+              <th>Rank</th>
               <th>Game</th>
-              <th>Total Matches</th>
+              <th>Total Plays</th>
               <th>Unique Players</th>
             </tr>
           </thead>
           <tbody>`;
-        topGames.forEach(item => {
+        topGames.forEach((item, index) => {
           tableHTML += `<tr>
+            <td>${index + 1}</td>
             <td>${item.game}</td>
-            <td>${item.matches}</td>
-            <td>${item.uniquePlayers}</td>
+            <td>${item.count}</td>
+            <td>${item.unique}</td>
           </tr>`;
         });
-        tableHTML += "</tbody></table>";
+        tableHTML += `</tbody></table>`;
         
         document.getElementById("result").innerHTML = tableHTML;
       })
       .catch(error => {
-        console.error("Error processing CSV:", error);
-        document.getElementById("result").innerHTML = `<p>Error loading game stats: ${error.message}</p>`;
+        document.getElementById("result").innerHTML = `<p>Error loading data: ${error.message}</p>`;
       });
   </script>
 </body>

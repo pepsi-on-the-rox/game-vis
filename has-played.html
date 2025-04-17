@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Player Game Counts with Favorite</title>
+  <style>
+    body {
+      background-color: #222;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 90%;
+      max-width: 800px;
+      margin: 0 auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #555;
+    }
+    th {
+      background-color: #333;
+    }
+    td {
+      background-color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Plays by Player and Game</h1>
+  <div id="result">
+    <p>Loading data…</p>
+  </div>
+  <script>
+    // Players and games of interest
+    const players = ["Rianne", "Bart", "Sabrina", "Martijn"];
+    const games = [
+      "365 Adventures: The Dungeon",
+      "Welcome to the Moon",
+      "Merchants Cove",
+      "Turing Machine",
+      "Cartographers"
+    ];
+
+    // Initialize counts
+    const counts = {};
+    players.forEach(p => {
+      counts[p] = {};
+      games.forEach(g => counts[p][g] = 0);
+    });
+
+    // Fetch fixed JSON
+    fetch("datasets/fixed-excali8ur-plays-2025-03-23.json")
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(data => {
+        // Identify header key for game name
+        const gameKey = Object.keys(data[0] || {}).find(k => k.toLowerCase().includes('game name'));
+
+        data.forEach(rec => {
+          // Raw game value (may include extra quotes)
+          let rawGame = rec[gameKey] || "";
+          // Remove surrounding quotes if present
+          let gameName = rawGame.trim().replace(/^"(.*)"$/, '$1');
+
+          // Find matching game from our list (case-insensitive)
+          const matchedGame = games.find(g => g.toLowerCase() === gameName.toLowerCase());
+          if (!matchedGame) return;
+
+          // Identify player name keys
+          Object.keys(rec).forEach(key => {
+            const lk = key.toLowerCase();
+            if (lk.includes('player') && lk.includes('name') && !lk.includes('username')) {
+              const nameVal = (rec[key] || "").trim();
+              if (players.includes(nameVal)) {
+                counts[nameVal][matchedGame]++;
+              }
+            }
+          });
+        });
+
+        // Build and display the results table
+        let html = `<table><thead><tr><th>Player</th>`;
+        games.forEach(g => html += `<th>${g}</th>`);
+        html += `<th>Favorite Game</th></tr></thead><tbody>`;
+
+        players.forEach(p => {
+          html += `<tr><td>${p}</td>`;
+          games.forEach(g => html += `<td>${counts[p][g]}</td>`);
+          // Compute favorite: game with max plays
+          let fav = games[0];
+          let max = counts[p][fav];
+          games.forEach(g => {
+            if (counts[p][g] > max) { max = counts[p][g]; fav = g; }
+          });
+          html += `<td>${fav}</td>`;
+          html += `</tr>`;
+        });
+
+        html += `</tbody></table>`;
+        document.getElementById("result").innerHTML = html;
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById("result").innerHTML = `<p>Error: ${err.message}</p>`;
+      });
+  </script>
+</body>
+</html>

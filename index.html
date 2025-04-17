@@ -48,30 +48,32 @@
   <button id="submit-btn" class="submit-btn">Display Stats</button>
   
   <script>
-    // Fetch the CSV to extract unique player names.
-    fetch("datasets/excali8ur-plays-2025-03-23.csv")
+    // Fetch the fixed Excalibur JSON file to extract unique player names.
+    fetch("datasets/fixed-excali8ur-plays-2025-03-23.json")
       .then(response => {
-        if (!response.ok) throw new Error("Network response was not ok: " + response.statusText);
-        return response.text();
-      })
-      .then(csvText => {
-        const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
-        if (lines.length < 2) throw new Error("CSV does not contain enough rows.");
-        const headers = lines[0].split(',').map(h => h.trim());
-        // Look for columns with "player" and "name" (ignore "username")
-        const playerIndices = [];
-        headers.forEach((header, idx) => {
-          const lower = header.toLowerCase();
-          if (lower.includes("player") && lower.includes("name") && !lower.includes("username"))
-            playerIndices.push(idx);
-        });
-        const uniquePlayers = new Set();
-        for (let i = 1; i < lines.length; i++) {
-          const cells = lines[i].split(',').map(cell => cell.trim());
-          playerIndices.forEach(idx => {
-            if (cells[idx] && cells[idx] !== "") uniquePlayers.add(cells[idx]);
-          });
+        if (!response.ok) {
+          throw new Error("Network response was not ok: " + response.statusText);
         }
+        return response.json();
+      })
+      .then(data => {
+        // Use a Set to gather unique player names.
+        const uniquePlayers = new Set();
+        data.forEach(item => {
+          // Iterate over every key in each JSON record.
+          Object.keys(item).forEach(key => {
+            // For player name fields, we assume keys containing "player" and "name"
+            // (but not "username") hold the player's name.
+            let lowerKey = key.toLowerCase();
+            if (lowerKey.includes("player") && lowerKey.includes("name") && !lowerKey.includes("username")) {
+              let playerName = item[key].trim();
+              if (playerName !== "") {
+                uniquePlayers.add(playerName);
+              }
+            }
+          });
+        });
+
         const playerMenu = document.getElementById("player-menu");
         playerMenu.innerHTML = "";
         if (uniquePlayers.size === 0) {
@@ -86,7 +88,7 @@
             label.appendChild(document.createTextNode(" " + player));
             playerMenu.appendChild(label);
           });
-          // Limit selection to 5
+          // Limit selection to 5 players.
           const checkboxes = playerMenu.querySelectorAll("input[type=checkbox]");
           checkboxes.forEach(chk => {
             chk.addEventListener("change", () => {
@@ -100,11 +102,11 @@
         }
       })
       .catch(error => {
-        console.error("Error loading CSV data:", error);
+        console.error("Error loading JSON data:", error);
         document.getElementById("player-menu").innerHTML = `<p>Error loading players: ${error.message}</p>`;
       });
     
-    // When button clicked, pass selected players to confirmation page.
+    // When the submit button is clicked, pass the selected players to the stats page.
     document.getElementById("submit-btn").addEventListener("click", () => {
       const selected = Array.from(document.querySelectorAll("#player-menu input[type=checkbox]:checked"))
                             .map(chk => chk.value);
