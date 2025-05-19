@@ -37,38 +37,26 @@
   <div id="result">
     <p>Loading data...</p>
   </div>
-
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
-    // Fetch the fixed JSON file from the datasets folder.
     fetch("datasets/fixed-excali8ur-plays-2025-03-23.json")
       .then(response => {
-        if (!response.ok) {
-          throw new Error("Network error: " + response.statusText);
-        }
+        if (!response.ok) throw new Error("Network error: " + response.statusText);
         return response.json();
       })
       .then(data => {
-        // Dictionaries for total plays and unique players per game.
         let gameCounts = {};
         let gameUniquePlayers = {};
-
-        // Iterate through each play record.
+  
         data.forEach(item => {
-          // Get the game name from the "\"game name\"" field.
           let game = item["\"game name\""];
           if (game) {
             game = game.trim();
-            // Increment the play count.
             gameCounts[game] = (gameCounts[game] || 0) + 1;
-            
-            // Initialize the unique players set if not already.
-            if (!gameUniquePlayers[game]) {
-              gameUniquePlayers[game] = new Set();
-            }
-            // Iterate over each key in the record.
+  
+            if (!gameUniquePlayers[game]) gameUniquePlayers[game] = new Set();
             Object.keys(item).forEach(key => {
               let lowerKey = key.toLowerCase();
-              // Check for keys that likely hold a player's name.
               if (lowerKey.includes("player") && lowerKey.includes("name") && !lowerKey.includes("username")) {
                 let playerName = item[key].trim();
                 if (playerName !== "") {
@@ -78,8 +66,7 @@
             });
           }
         });
-        
-        // Convert the total plays object into an array for sorting.
+  
         let gamesArray = [];
         for (let game in gameCounts) {
           gamesArray.push({
@@ -88,38 +75,121 @@
             unique: gameUniquePlayers[game].size
           });
         }
-        
-        // Sort the array in descending order by total plays.
+  
         gamesArray.sort((a, b) => b.count - a.count);
-        
-        // Select the top 5 games.
         let topGames = gamesArray.slice(0, 5);
-        
-        // Build the HTML table with columns: Rank, Game, Total Plays, and Unique Players.
-        let tableHTML = `<table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Game</th>
-              <th>Total Plays</th>
-              <th>Unique Players</th>
-            </tr>
-          </thead>
-          <tbody>`;
-        topGames.forEach((item, index) => {
-          tableHTML += `<tr>
-            <td>${index + 1}</td>
-            <td>${item.game}</td>
-            <td>${item.count}</td>
-            <td>${item.unique}</td>
-          </tr>`;
-        });
-        tableHTML += `</tbody></table>`;
-        
-        document.getElementById("result").innerHTML = tableHTML;
+  
+        d3.select("#result").html("");
+  
+        const width = 1400;
+        const height = 500;
+        const svg = d3.select("#result")
+          .append("svg")
+          .attr("width", width)
+          .attr("height", height);
+  
+        const cardWidth = 220;
+        const cardHeight = 320;
+        const spacing = 240;
+        const startX = 40;
+        const startY = 80;
+  
+        const cards = svg.selectAll("g.card")
+          .data(topGames)
+          .enter()
+          .append("g")
+          .attr("class", "card")
+          .attr("transform", (d, i) => `translate(${startX + i * spacing}, ${startY})`);
+  
+        // Outer rounded card (red)
+        cards.append("rect")
+          .attr("width", cardWidth)
+          .attr("height", cardHeight)
+          .attr("rx", 20)
+          .attr("ry", 20)
+          .attr("fill", "#cc0000")
+          .attr("stroke", "#999")
+          .attr("stroke-width", 3);
+  
+        // Top-left circle (ranking)
+        cards.append("circle")
+          .attr("cx", 25)
+          .attr("cy", 25)
+          .attr("r", 25)
+          .attr("fill", "#ccc");
+  
+        cards.append("text")
+          .attr("x", 25)
+          .attr("y", 30)
+          .attr("text-anchor", "middle")
+          .attr("fill", "black")
+          .style("font-size", "16px")
+          .text((d, i) => `#${i + 1}`);
+  
+        // Large rectangle (image placeholder)
+        cards.append("rect")
+          .attr("x", 15)
+          .attr("y", 60)
+          .attr("width", cardWidth - 30)
+          .attr("height", 120)
+          .attr("fill", "#aaa");
+  
+        // Game name block
+        cards.append("rect")
+          .attr("x", 15)
+          .attr("y", 190)
+          .attr("width", cardWidth - 30)
+          .attr("height", 40)
+          .attr("rx", 8)
+          .attr("ry", 8)
+          .attr("fill", "#ddd");
+  
+        cards.append("text")
+          .attr("x", cardWidth / 2)
+          .attr("y", 215)
+          .attr("text-anchor", "middle")
+          .attr("fill", "black")
+          .style("font-weight", "bold")
+          .style("font-size", "14px")
+          .text(d => d.game);
+  
+        // Curved textbox at bottom
+        cards.append("path")
+          .attr("d", `M15,240 h${cardWidth - 30} a10,10 0 0 1 10,10 v40 a10,10 0 0 1 -10,10 h-${cardWidth - 30} a10,10 0 0 1 -10,-10 v-40 a10,10 0 0 1 10,-10`)
+          .attr("fill", "#bbb");
+  
+        // Bottom-left circle (number of plays)
+        cards.append("circle")
+          .attr("cx", 40)
+          .attr("cy", cardHeight - 30)
+          .attr("r", 25)
+          .attr("fill", "#ccc");
+  
+        cards.append("text")
+          .attr("x", 40)
+          .attr("y", cardHeight - 25)
+          .attr("text-anchor", "middle")
+          .attr("fill", "black")
+          .style("font-size", "14px")
+          .text(d => d.count);
+  
+        // Bottom-right circle (unique players)
+        cards.append("circle")
+          .attr("cx", cardWidth - 40)
+          .attr("cy", cardHeight - 30)
+          .attr("r", 25)
+          .attr("fill", "#ccc");
+  
+        cards.append("text")
+          .attr("x", cardWidth - 40)
+          .attr("y", cardHeight - 25)
+          .attr("text-anchor", "middle")
+          .attr("fill", "black")
+          .style("font-size", "14px")
+          .text(d => d.unique);
       })
       .catch(error => {
-        document.getElementById("result").innerHTML = `<p>Error loading data: ${error.message}</p>`;
+        d3.select("#result").html(`<p>Error loading data: ${error.message}</p>`);
       });
   </script>
 </body>

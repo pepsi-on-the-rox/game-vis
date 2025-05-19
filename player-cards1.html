@@ -2,257 +2,211 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Player Cards</title>
-  <link rel="stylesheet" href="stylesheets/cards.css">
+  <title>Dynamic Stats Cards</title>
   <style>
-    /* Additional styling for this page */
-    h1 { margin-bottom: 20px; }
-    #cards-container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 20px;
+    body {
+      background-color: #222;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      overflow-x: hidden;
     }
+    h1 {
+      text-align: center;
+      margin: 20px 0;
+    }
+    svg {
+      display: block;
+      margin: 0 auto;
+    }
+    .color-button {
+      position: fixed;
+      bottom: 20px;
+      padding: 10px 24px;
+      font-size: 16px;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #blueButton { left: 20px; background:#0055cc; }
+    #redButton  { right:20px; background:#cc0000; }
   </style>
 </head>
 <body>
-  <h1>Player Cards</h1>
-  <div id="cards-container">
-    <p>Loading player stats...</p>
-  </div>
-  
+  <h1 id="pageTitle">Player Stats</h1>
+  <div id="cards-container"><p style="text-align:center">Loading data…</p></div>
+  <button id="blueButton" class="color-button">Player stats</button>
+  <button id="redButton"  class="color-button">Game stats</button>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
-    // Utility function: Parse URL query parameters.
-    function getQueryParams() {
-      const params = {};
-      window.location.search.substring(1)
-        .split("&")
-        .forEach(pair => {
-          const [key, value] = pair.split("=");
-          if (key) params[key] = decodeURIComponent(value);
-        });
-      return params;
-    }
-    
-    // Retrieve selected players from query parameter "players".
-    const params = getQueryParams();
-    let selectedPlayers = [];
-    if (params.players) {
-      try {
-        selectedPlayers = JSON.parse(params.players);
-      } catch (e) {
-        console.error("Error parsing selected players:", e);
-      }
-    }
-    if (selectedPlayers.length === 0) {
-      document.getElementById("cards-container").innerHTML = "<p>No player data available.</p>";
-      throw new Error("No players selected");
-    }
-    
-    // Fetch and process the CSV file.
-    fetch("datasets/excali8ur-plays-2025-03-23.csv")
-      .then(response => {
-        if (!response.ok) throw new Error("Network error: " + response.statusText);
-        return response.text();
-      })
-      .then(csvText => {
-        const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
-        if (lines.length < 2) throw new Error("CSV doesn't have data rows.");
-        const headers = lines[0].split(',').map(h => h.trim());
-        console.log("Headers:", headers);
-        
-        // Determine a unique game identifier column.
-        let gameNameIndex = headers.findIndex(h => h.toLowerCase().includes("game name"));
-        let playIdIndex = headers.findIndex(h => h.toLowerCase().includes("play id"));
-        const gameIdIndex = gameNameIndex !== -1 ? gameNameIndex : (playIdIndex !== -1 ? playIdIndex : -1);
-        
-        // Build an array of name/win column pairs.
-        const pairs = [];
-        headers.forEach((header, idx) => {
-          const nameMatch = header.match(/player\s*(\d+)\s*name/i);
-          if (nameMatch && !header.toLowerCase().includes("username")) {
-            const num = nameMatch[1];
-            const winIndex = headers.findIndex(h => h.toLowerCase().includes("player") &&
-                                                       h.toLowerCase().includes(num) &&
-                                                       h.toLowerCase().includes("win"));
-            if (winIndex !== -1) {
-              pairs.push({ nameIndex: idx, winIndex: winIndex });
-            }
-          }
-        });
-        console.log("Name/Win pairs:", pairs);
-        
-        // Initialize a stats object for each selected player.
-        const stats = {};
-        selectedPlayers.forEach(player => {
-          stats[player] = { matchCount: 0, wins: 0, uniqueGames: new Set(), rivalStats: {} };
-        });
-        
-        // Process each data row (skip header row).
-        for (let i = 1; i < lines.length; i++) {
-          const cells = lines[i].split(',').map(cell => cell.trim());
-          selectedPlayers.forEach(player => {
-            let found = false;
-            let winVal = "0";  // Defaults to loss if not "1"
-            const opponentsInRow = new Set();
-            pairs.forEach(pair => {
-              let nameVal = cells[pair.nameIndex] ? cells[pair.nameIndex].replace(/^"(.*)"$/, '$1').trim() : "";
-              let currentWin = cells[pair.winIndex] ? cells[pair.winIndex].replace(/^"(.*)"$/, '$1').trim() : "0";
-              if (nameVal.toLowerCase() === player.toLowerCase()) {
-                found = true;
-                winVal = currentWin;
-              } else if (nameVal !== "") {
-                opponentsInRow.add(nameVal);
-              }
-            });
-            if (found) {
-              stats[player].matchCount++;
-              if (winVal === "1") {
-                stats[player].wins++;
-              }
-              if (gameIdIndex !== -1 && cells[gameIdIndex]) {
-                let gameId = cells[gameIdIndex].replace(/^"(.*)"$/, '$1').trim();
-                stats[player].uniqueGames.add(gameId);
-              }
-              opponentsInRow.forEach(opp => {
-                if (opp.toLowerCase() !== player.toLowerCase()) {
-                  if (!stats[player].rivalStats[opp]) {
-                    stats[player].rivalStats[opp] = { games: 0, wins: 0 };
-                  }
-                  stats[player].rivalStats[opp].games++;
-                  if (winVal === "1") {
-                    stats[player].rivalStats[opp].wins++;
-                  }
-                }
-              });
-            }
-          });
-        }
-        
-        // Build a stats array for easier card creation.
-        const statsArray = [];
-        selectedPlayers.forEach(player => {
-          const s = stats[player];
-          const uniqueGameCount = s.uniqueGames.size;
-          let biggestRival = null;
-          let maxRivalGames = 0;
-          let rivalWins = 0;
-          for (const opp in s.rivalStats) {
-            if (s.rivalStats[opp].games > maxRivalGames) {
-              maxRivalGames = s.rivalStats[opp].games;
-              biggestRival = opp;
-              rivalWins = s.rivalStats[opp].wins;
-            }
-          }
-          let rivalDescription = biggestRival 
-            ? `${player}'s biggest rival is ${biggestRival}. Out of ${maxRivalGames} games, ${player} has won ${((rivalWins/maxRivalGames)*100).toFixed(1)}% against them.`
-            : "No rival data available.";
-          statsArray.push({
-            player: player,
-            matchCount: s.matchCount,
-            wins: s.wins,
-            uniqueGames: uniqueGameCount,
-            description: rivalDescription
-          });
-        });
-        console.log("Stats Array:", statsArray);
-        
-        // Helper function: Create an inline SVG circle with a label and a number.
-        function createCircleSVG(label, number) {
-          return `
-            <svg viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="45" stroke="#000" stroke-width="2" fill="#ccc"></circle>
-              <text x="50%" y="35" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="#000">
-                ${label}
-              </text>
-              <text x="50%" y="65" text-anchor="middle" dominant-baseline="middle" font-size="20" fill="#000">
-                ${number}
-              </text>
-            </svg>
-          `;
-        }
-        
-        // Display a card for each selected player.
-        const container = document.getElementById("cards-container");
-        container.innerHTML = "";
-        statsArray.forEach((item, i) => {
-          const cardHTML = `
-            <div class="card">
-          <!-- Top-left circle with curved text and centered number -->
-          <div class="circle top-left">
-            <svg viewBox="0 0 100 100">
-              <defs>
-                <path id="curveTL${item.wins}/${item.matchCount}" d="M 10,50 A 40,40 0 0,0 90,50" />
-              </defs>
-              <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveTL${item.wins}/${item.matchCount}" startOffset="50%" text-anchor="middle">
-                  Top Left
-                </textPath>
-              </text>
-              <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
-                    text-anchor="middle" dominant-baseline="middle">
-                ${item.wins}/${item.matchCount}
-              </text>
-            </svg>
-          </div>
-          
-          <!-- Bottom-left circle with curved text and centered number -->
-          <div class="circle bottom-left">
-            <svg viewBox="0 0 100 100">
-              <defs>
-                <path id="curveBL${item.uniqueGames}" d="M 10,50 A 40,40 0 0,0 90,50" />
-              </defs>
-              <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveBL${item.uniqueGames}" startOffset="50%" text-anchor="middle">
-                  Bottom Left
-                </textPath>
-              </text>
-              <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
-                    text-anchor="middle" dominant-baseline="middle">
-                ${item.uniqueGames}
-              </text>
-            </svg>
-          </div>
-          
-          <!-- Bottom-right circle with curved text and centered number -->
-          <div class="circle bottom-right">
-            <svg viewBox="0 0 100 100">
-              <defs>
-                <path id="curveBR${i}" d="M 90,50 A 40,40 0 0,0 10,50" />
-              </defs>
-              <text fill="#000" font-size="10" font-weight="bold" dominant-baseline="middle">
-                <textPath href="#curveBR${i}" startOffset="50%" text-anchor="middle">
-                  Bottom Right
-                </textPath>
-              </text>
-              <text x="50" y="50" fill="#000" font-size="20" font-weight="bold"
-                    text-anchor="middle" dominant-baseline="middle">
-                ${i}
-              </text>
-            </svg>
-          </div>
-          
-          <!-- Top rectangle -->
-          <div class="top-rectangle">Top Section</div>
-          
-          <!-- Field with title -->
-          <div class="field">${item.player}</div>
-          
-          <!-- Bottom shape with text description -->
-          <div class="bottom-shape">
-            <p class="description" style="text-align: center; margin: 10px;">
-              This is a description text for the card.
-            </p>
-          </div>
-        </div>
-      `;
-          container.innerHTML += cardHTML;
-        });
-      })
-      .catch(error => {
-        console.error("Error processing CSV data:", error);
-        document.getElementById("cards-container").innerHTML = "<p>Error loading stats.</p>";
+    function getQueryParams(){
+      const p={};
+      location.search.slice(1).split('&').forEach(pair=>{
+        const[a,b]=pair.split('=');
+        if(a)p[a]=decodeURIComponent(b)
       });
+      return p
+    }
+    const params=getQueryParams();
+    let selectedPlayers=[];
+    if(params.players){
+      try{selectedPlayers=JSON.parse(params.players);}
+      catch(e){console.error(e);}
+    }
+
+    const cardW=220, cardH=320, spacing=240, yStart=80;
+    let playerData=[], gameData=[];
+
+    d3.json('datasets/fixed-excali8ur-plays-2025-03-23.json').then(raw=>{
+      preprocess(raw);
+      render('players');
+    }).catch(err=>{
+      d3.select('#cards-container').html('<p style="text-align:center">Error loading data.</p>');
+      console.error(err);
+    });
+
+    function preprocess(data){
+      const headers=Object.keys(data[0]||{});
+      const nameKeys=headers.filter(k=>/player.*name/i.test(k)&&!/username/i.test(k));
+      const winKeys=nameKeys.map(k=>k.replace(/name/i,'win'));
+      const gameKey=headers.find(k=>/game name/i.test(k))||headers.find(k=>/play id/i.test(k));
+
+      const pStats={};
+      selectedPlayers.forEach(p=>pStats[p]={wins:0, unique:new Set(), rivals:{}});
+      data.forEach(rec=>{
+        const g=(rec[gameKey]||'').trim();
+        nameKeys.forEach((nk,i)=>{
+          const name=(rec[nk]||'').trim();
+          if(!selectedPlayers.includes(name))return;
+          const st=pStats[name];
+          if((rec[winKeys[i]]||'').trim()==='1') st.wins++;
+          if(g)st.unique.add(g);
+          nameKeys.forEach(ok=>{
+            const opp=(rec[ok]||'').trim();
+            if(opp&&opp!==name){
+              st.rivals[opp]=(st.rivals[opp]||0)+1;
+            }
+          })
+        });
+      });
+
+      playerData=selectedPlayers.map(p=>{
+        const st=pStats[p];
+        const rival=Object.entries(st.rivals).sort((a,b)=>b[1]-a[1])[0]||['-',0];
+        return {
+          type:'player',
+          name:p,
+          wins:st.wins,
+          unique:st.unique.size,
+          mostPlayedGame:rival[0],
+          rival:`Rival: ${rival[0]} (${rival[1]} games)`
+        };
+      }).sort((a,b)=>b.wins-a.wins);
+
+      const gCount={}, gPlayers={};
+      data.forEach(rec=>{
+        const g=(rec[gameKey]||'').trim();
+        if(!g)return;
+        gCount[g]=(gCount[g]||0)+1;
+        gPlayers[g]=gPlayers[g]||new Set();
+        nameKeys.forEach(nk=>{
+          const n=(rec[nk]||'').trim();
+          if(n) gPlayers[g].add(n);
+        });
+      });
+
+      gameData=Object.entries(gCount).map(([g,c])=>({
+        type:'game',
+        name:g,
+        plays:c,
+        unique:gPlayers[g].size
+      })).sort((a,b)=>b.plays-a.plays).slice(0,5);
+    }
+
+    function render(mode){
+      const container=d3.select('#cards-container').html('');
+      const dataArr=mode==='players'?playerData:gameData;
+      const svgW=Math.max(dataArr.length*spacing+40, window.innerWidth);
+      const svgH=500;
+      const svg=container.append('svg').attr('width',svgW).attr('height',svgH);
+      const startX=(svgW-(dataArr.length-1)*spacing-cardW)/2;
+
+      const cards=svg.selectAll('g.card').data(dataArr, d=>d.name);
+      cards.exit().remove();
+      const enter=cards.enter().append('g').attr('class','card');
+      const merged=enter.merge(cards)
+        .attr('transform',(d,i)=>`translate(${startX+i*spacing},${yStart})`);
+
+      merged.selectAll('rect.bg').data(d=>[d]).join(
+        enter=>enter.append('rect').attr('class','bg').attr('rx',20).attr('ry',20)
+                        .attr('width',cardW).attr('height',cardH)
+                        .attr('fill',mode==='players'?'#0055cc':'#cc0000')
+                        .attr('stroke','#999').attr('stroke-width',3),
+        update=>update.transition().duration(400).attr('fill',mode==='players'?'#0055cc':'#cc0000')
+      );
+
+      const topGrp=merged.selectAll('g.top').data(d=>[d]);
+      const topEnter=topGrp.enter().append('g').attr('class','top');
+      topEnter.append('circle').attr('r',25).attr('cx',25).attr('cy',25).attr('fill','#ccc');
+      topEnter.append('text').attr('x',25).attr('y',30)
+        .attr('text-anchor','middle').attr('fill','black').style('font-size','16px');
+      topGrp.merge(topEnter).select('text').text(d=>mode==='players'?d.wins:`#${dataArr.indexOf(d)+1}`);
+
+      merged.selectAll('rect.img').data(d=>[d]).join(
+        enter=>enter.append('rect').attr('class','img').attr('x',15).attr('y',60)
+          .attr('width',cardW-30).attr('height',120).attr('fill','#aaa')
+      );
+
+      merged.selectAll('rect.nameBar').data(d=>[d]).join(
+        enter=>enter.append('rect').attr('class','nameBar')
+          .attr('x',15).attr('y',190).attr('width',cardW-30).attr('height',40).attr('rx',8).attr('ry',8).attr('fill','#ddd')
+      );
+
+      merged.selectAll('text.nameText').data(d=>[d]).join(
+        enter=>enter.append('text').attr('class','nameText').attr('y',215)
+          .attr('text-anchor','middle').attr('fill','black').style('font-weight','bold').style('font-size','14px'),
+        update=>update
+      ).attr('x',cardW/2).text(d=>d.name);
+
+      merged.selectAll('path.descBG').data(d=>[d]).join(
+        enter=>enter.append('path').attr('class','descBG')
+          .attr('d',`M15,240 h${cardW-30} a10,10 0 0 1 10,10 v50 a10,10 0 0 1 -10,10 h-${cardW-30} a10,10 0 0 1 -10,-10 v-50 a10,10 0 0 1 10,-10`)
+          .attr('fill','#bbb')
+      );
+
+      merged.selectAll('text.desc').data(d=>[d]).join(
+        enter=>enter.append('text').attr('class','desc').attr('text-anchor','middle').attr('fill','black').style('font-size','11px'),
+        update=>update
+      ).attr('x',cardW/2).attr('y',255).selectAll('tspan').data(d=>{
+          if(mode==='players') return d.rival.match(/.{1,28}(?:\\s|$)/g);
+          return [`Plays: ${d.plays}`,`Unique: ${d.unique}`];
+      }).join(
+        enter=>enter.append('tspan'),
+        update=>update,
+        exit=>exit.remove()
+      ).attr('x',cardW/2).attr('dy',(d,i)=>i===0?0:14).text(t=>t.trim());
+
+      const leftGrp=merged.selectAll('g.left').data(d=>[d]);
+      const leftEnt=leftGrp.enter().append('g').attr('class','left');
+      leftEnt.append('circle').attr('r',25).attr('cx',40).attr('cy',cardH-30).attr('fill','#ccc');
+      leftEnt.append('text').attr('x',40).attr('y',cardH-25).attr('text-anchor','middle').attr('fill','black').style('font-size','14px');
+      leftGrp.merge(leftEnt).select('text').text(d=>mode==='players'?d.unique:d.plays);
+
+      const rightGrp=merged.selectAll('g.right').data(d=>[d]);
+      const rightEnt=rightGrp.enter().append('g').attr('class','right');
+      rightEnt.append('circle').attr('r',25).attr('cx',cardW-40).attr('cy',cardH-30).attr('fill','#ccc');
+      rightEnt.append('text').attr('text-anchor','middle').attr('fill','black').style('font-size','12px');
+      rightGrp.merge(rightEnt).select('text')
+        .attr('x',cardW-40).attr('y',cardH-25)
+        .text(d=>mode==='players'?d.mostPlayedGame:d.unique);
+
+      d3.select('#pageTitle').text(mode==='players'? 'Player Stats':'Top 5 Games');
+    }
+
+    document.getElementById('blueButton').onclick=()=>render('players');
+    document.getElementById('redButton').onclick=()=>render('games');
   </script>
 </body>
 </html>
