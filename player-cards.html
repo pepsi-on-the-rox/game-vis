@@ -1,24 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Dynamic Stats Cards</title>
+  <meta charset="UTF-8" />
+  <title>Game Visualisation</title>
   <style>
     body {
-      background-color: #222;
-      color: #eee;
-      font-family: Arial, sans-serif;
       margin: 0;
-      overflow-x: hidden;
+      background: url('assets/wood-texture.jpg') repeat center center;
+      color: white;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
     }
     h1 {
       text-align: center;
-      margin: 20px 0;
+      margin-top: 10px;
     }
-    svg {
-      display: block;
-      margin: 0 auto;
+    #board {
+      background: url('assets/boardv2.jpg') no-repeat center center;
+      background-size: contain;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
     }
+    #cards-container {
+      position: absolute;
+      top: 6%;
+      left: 0;
+    }
+
+    .image-button {
+      position: fixed;
+      bottom: 20px;
+      width: 190px;
+      height: auto;
+      cursor: pointer;
+      z-index: 10;
+    }
+
+    #blueButton {
+      left: 55px;
+    }
+
+    #redButton {
+      right: 55px;
+    }
+
     .color-button {
       position: fixed;
       bottom: 20px;
@@ -28,183 +54,569 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      z-index: 10;
     }
-    #blueButton { left: 20px; background:#0055cc; }
-    #redButton  { right:20px; background:#cc0000; }
   </style>
 </head>
 <body>
-  <h1 id="pageTitle">Player Stats</h1>
-  <div id="cards-container"><p style="text-align:center">Loading data…</p></div>
-  <button id="blueButton" class="color-button">Player stats</button>
-  <button id="redButton"  class="color-button">Game stats</button>
+  <div id="board">
+    <h1 id="pageTitle">Player Stats</h1>
+    <div id="cards-container"></div>
+  </div>
+  <img id="blueButton" src="assets/deck-speler.png" class="image-button" alt="Player Stats">
+  <img id="redButton" src="assets/deck-spel.png" class="image-button" alt="Game Stats">
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
-    /* ---------- Helper ---------- */
-    function getQueryParams(){const p={};location.search.slice(1).split('&').forEach(pair=>{const[a,b]=pair.split('=');if(a)p[a]=decodeURIComponent(b)});return p}
-    const params=getQueryParams();
-    let selectedPlayers=[];
-    if(params.players){try{selectedPlayers=JSON.parse(params.players);}catch(e){console.error(e);}}
+    let mode = 'players';
 
-    /* ---------- Layout constants ---------- */
-    const cardW=220, cardH=320, spacing=240, yStart=80;
+    const params = new URLSearchParams(location.search);
+    const selectedPlayers = params.get("players") ? JSON.parse(params.get("players")) : [];
+    const pawnImages = [
+      'assets/red-pawn.png',
+      'assets/blue-pawn.png',
+      'assets/yellow-pawn.png',
+      'assets/pink-pawn.png',
+      'assets/green-pawn.png'
+    ];
 
-    /* ---------- Data containers ---------- */
-    let playerData=[], gameData=[];
+    // Path placement parameters (adjust X/Y as needed)
+    const pathStartX = 330;
+    let pathEndX;
+    let pathWidth;
+    const pathStartY = 100;
+    const pathEndY = 50;     // This is higher on screen than startY
+    const pathControlY = 500; // Peak of the parabola
 
-    /* ---------- Fetch & preprocess once ---------- */
-    d3.json('datasets/fixed-excali8ur-plays-2025-03-23.json').then(raw=>{
-      preprocess(raw);
-      render('players'); // initial view
-    }).catch(err=>{
-      d3.select('#cards-container').html('<p style="text-align:center">Error loading data.</p>');
-      console.error(err);
+    function drawParabolaPath(svg) {
+      const path = d3.path();
+      path.moveTo(pathStartX, pathStartY);
+      path.quadraticCurveTo((pathStartX + pathEndX) / 2, pathControlY, pathEndX, pathEndY);
+
+      // Optional: visualize the path
+      svg.append('path')
+        .attr('d', path.toString())
+        .attr('stroke', '#aaa')
+        .attr('stroke-width', 2)
+        .attr('fill', 'none')
+        .attr('stroke-dasharray', '5,5');
+
+      // Optional: visualize start/end
+      svg.append('circle')
+        .attr('cx', pathStartX)
+        .attr('cy', pathStartY)
+        .attr('r', 6)
+        .attr('fill', 'lime');
+        
+      svg.append('circle')
+        .attr('cx', pathEndX)
+        .attr('cy', pathEndY)
+        .attr('r', 6)
+        .attr('fill', 'red');
+    }
+
+const playerPawnMap = {};
+selectedPlayers.forEach((p, i) => {
+  playerPawnMap[p] = pawnImages[i % pawnImages.length];
+});
+
+    let playerData = [], gameData = [];
+
+    d3.json("datasets/fixed-excali8ur-plays-2025-03-23.json").then(data => {
+      preprocess(data);
+      render("players");
     });
 
     function preprocess(data){
-      // identify column keys
-      const headers=Object.keys(data[0]||{});
-      const nameKeys=headers.filter(k=>/player.*name/i.test(k)&&!/username/i.test(k));
-      const winKeys=nameKeys.map(k=>k.replace(/name/i,'win'));
-      const gameKey=headers.find(k=>/game name/i.test(k))||headers.find(k=>/play id/i.test(k));
+      const headers = Object.keys(data[0] || {});
+      const nameKeys = headers.filter(k => /player.*name/i.test(k) && !/username/i.test(k));
+      const winKeys = nameKeys.map(k => k.replace(/name/i, 'win'));
+      const gameKey = headers.find(k => /game name/i.test(k)) || headers.find(k => /play id/i.test(k));
 
-      /* -- Player stats -- */
-      const pStats={};
-      selectedPlayers.forEach(p=>pStats[p]={wins:0, unique:new Set(), rivals:{}});
-      data.forEach(rec=>{
-        const g=(rec[gameKey]||'').trim();
-        nameKeys.forEach((nk,i)=>{
-          const name=(rec[nk]||'').trim();
-          if(!selectedPlayers.includes(name))return;
-          const st=pStats[name];
-          if((rec[winKeys[i]]||'').trim()==='1') st.wins++;
-          if(g)st.unique.add(g);
-          // rival calc
-          nameKeys.forEach(ok=>{const opp=(rec[ok]||'').trim();if(opp&&opp!==name){st.rivals[opp]=(st.rivals[opp]||0)+1;}})
+      const pStats = {};
+      selectedPlayers.forEach(p => pStats[p] = {
+        wins: 0,
+        uniqueGames: new Set(),
+        rivals: {},
+        gameCounts: {}
+      });
+
+      data.forEach(rec => {
+        const game = (rec[gameKey] || '').trim();
+        nameKeys.forEach((nk, i) => {
+          const name = (rec[nk] || '').trim();
+          if (!selectedPlayers.includes(name)) return;
+
+          const st = pStats[name];
+          if ((rec[winKeys[i]] || '').trim() === '1') st.wins++;
+          if (game) {
+            st.uniqueGames.add(game);
+            st.gameCounts[game] = (st.gameCounts[game] || 0) + 1;
+          }
+          nameKeys.forEach(ok => {
+            const opp = (rec[ok] || '').trim();
+            if (opp && opp !== name) {
+              st.rivals[opp] = (st.rivals[opp] || 0) + 1;
+            }
+          });
         });
       });
-      playerData=selectedPlayers.map(p=>{
-        const st=pStats[p];
-        const rival=Object.entries(st.rivals).sort((a,b)=>b[1]-a[1])[0]||['-',0];
+
+      playerData = selectedPlayers.map(p => {
+        const st = pStats[p];
+        const mostPlayed = Object.entries(st.gameCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '-';
+        const topRival = Object.entries(st.rivals).sort((a,b)=>b[1]-a[1])[0] || ['-', 0];
         return {
-          type:'player',
-          name:p,
-          wins:st.wins,
-          unique:st.unique.size,
-          rival:`Rival: ${rival[0]} (${rival[1]} games)`
+          type: "player",
+          name: p,
+          wins: st.wins,
+          unique: st.uniqueGames.size,
+          mostPlayedGame: mostPlayed,
+          rival: `Rival: ${topRival[0]} (${topRival[1]} games)`
         };
       }).sort((a,b)=>b.wins-a.wins);
 
-      /* -- Game stats (top 5 plays) -- */
-      const gCount={}, gPlayers={};
-      data.forEach(rec=>{
-        const g=(rec[gameKey]||'').trim();
-        if(!g)return;
-        gCount[g]=(gCount[g]||0)+1;
-        gPlayers[g]=gPlayers[g]||new Set();
-        nameKeys.forEach(nk=>{const n=(rec[nk]||'').trim(); if(n) gPlayers[g].add(n);});
+      const gCount = {}, gPlayers = {};
+      data.forEach(rec => {
+        const g = (rec[gameKey] || '').trim();
+        if (!g) return;
+        gCount[g] = (gCount[g] || 0) + 1;
+        gPlayers[g] = gPlayers[g] || new Set();
+        nameKeys.forEach(nk => {
+          const n = (rec[nk] || '').trim();
+          if (n) gPlayers[g].add(n);
+        });
       });
-      gameData=Object.entries(gCount).map(([g,c])=>({
-        type:'game',
-        name:g,
-        plays:c,
-        unique:gPlayers[g].size
+
+      gameData = Object.entries(gCount).map(([g, c]) => ({
+        type: "game",
+        name: g,
+        plays: c,
+        unique: gPlayers[g].size
       })).sort((a,b)=>b.plays-a.plays).slice(0,5);
     }
 
-    /* ---------- Rendering ---------- */
-    function render(mode){
-      const container=d3.select('#cards-container').html('');
-      const dataArr=mode==='players'?playerData:gameData;
-      const svgW=Math.max(dataArr.length*spacing+40, window.innerWidth);
-      const svgH=500;
-      const svg=container.append('svg').attr('width',svgW).attr('height',svgH);
-      const startX=(svgW-(dataArr.length-1)*spacing-cardW)/2;
+    const pawnPositionMap = {}; // name → { x, y }
 
-      const cards=svg.selectAll('g.card').data(dataArr, d=>d.name);
-      cards.exit().remove();
-      const enter=cards.enter().append('g').attr('class','card');
-      const merged=enter.merge(cards)
-        .attr('transform',(d,i)=>`translate(${startX+i*spacing},${yStart})`);
+    function applyHoverEffects(cardEl, pawnEl, playerName) {
+      const card = d3.select(cardEl);
+      const x = +card.attr('data-x');
+      const y = +card.attr('data-y');
 
-      // BACKGROUND RECT
-      merged.selectAll('rect.bg').data(d=>[d]).join(
-        enter=>enter.append('rect').attr('class','bg').attr('rx',20).attr('ry',20)
-                          .attr('width',cardW).attr('height',cardH)
-                          .attr('fill',mode==='players'?'#0055cc':'#cc0000')
-                          .attr('stroke','#999').attr('stroke-width',3),
-        update=>update.transition().duration(400).attr('fill',mode==='players'?'#0055cc':'#cc0000')
-      );
+      card.transition().duration(200)
+        .attr('transform', `translate(${x}, ${y - 10}) scale(1.05)`);
 
-      // TOP CIRCLE + VALUE
-      const topGrp=merged.selectAll('g.top').data(d=>[d]);
-      const topEnter=topGrp.enter().append('g').attr('class','top');
-      topEnter.append('circle').attr('r',25).attr('cx',25).attr('cy',25).attr('fill','#ccc');
-      topEnter.append('text').attr('x',25).attr('y',30)
-        .attr('text-anchor','middle').attr('fill','black').style('font-size','16px');
-      topGrp.merge(topEnter).select('text').text(d=>mode==='players'?d.wins:`#${dataArr.indexOf(d)+1}`);
-
-      // IMAGE PLACEHOLDER RECT (static)
-      merged.selectAll('rect.img').data(d=>[d]).join(
-        enter=>enter.append('rect').attr('class','img').attr('x',15).attr('y',60)
-          .attr('width',cardW-30).attr('height',120).attr('fill','#aaa')
-      );
-
-      // NAME BAR
-      const nameBar=merged.selectAll('rect.nameBar').data(d=>[d]);
-      nameBar.enter().append('rect').attr('class','nameBar')
-        .attr('x',15).attr('y',190).attr('width',cardW-30).attr('height',40).attr('rx',8).attr('ry',8).attr('fill','#ddd');
-      merged.selectAll('text.nameText').data(d=>[d]).join(
-        enter=>enter.append('text').attr('class','nameText').attr('y',215)
-          .attr('text-anchor','middle').attr('fill','black').style('font-weight','bold').style('font-size','14px'),
-        update=>update
-      ).attr('x',cardW/2).text(d=>d.name);
-
-      // DESCRIPTION BOX PATH (fixed)
-      merged.selectAll('path.descBG').data(d=>[d]).join(
-        enter=>enter.append('path').attr('class','descBG')
-          .attr('d',`M15,240 h${cardW-30} a10,10 0 0 1 10,10 v50 a10,10 0 0 1 -10,10 h-${cardW-30} a10,10 0 0 1 -10,-10 v-50 a10,10 0 0 1 10,-10`)
-          .attr('fill','#bbb')
-      );
-
-      // DESCRIPTION TEXT
-      merged.selectAll('text.desc').data(d=>[d]).join(
-        enter=>enter.append('text').attr('class','desc').attr('text-anchor','middle').attr('fill','black').style('font-size','11px'),
-        update=>update
-      ).attr('x',cardW/2).attr('y',255).selectAll('tspan').data(d=>{
-          if(mode==='players') return d.rival.match(/.{1,28}(?:\s|$)/g);
-          return [`Plays: ${d.plays}`,`Unique: ${d.unique}`];
-      }).join(
-        enter=>enter.append('tspan'),
-        update=>update,
-        exit=>exit.remove()
-      ).attr('x',cardW/2).attr('dy',(d,i)=>i===0?0:14).text(t=>t.trim());
-
-      // BOTTOM LEFT CIRCLE & VALUE
-      const leftGrp=merged.selectAll('g.left').data(d=>[d]);
-      const leftEnt=leftGrp.enter().append('g').attr('class','left');
-      leftEnt.append('circle').attr('r',25).attr('cx',40).attr('cy',cardH-30).attr('fill','#ccc');
-      leftEnt.append('text').attr('x',40).attr('y',cardH-25).attr('text-anchor','middle').attr('fill','black').style('font-size','14px');
-      leftGrp.merge(leftEnt).select('text').text(d=>mode==='players'?d.unique:d.plays);
-
-      // BOTTOM RIGHT CIRCLE & VALUE
-      const rightGrp=merged.selectAll('g.right').data(d=>[d]);
-      const rightEnt=rightGrp.enter().append('g').attr('class','right');
-      rightEnt.append('circle').attr('r',25).attr('cx',cardW-40).attr('cy',cardH-30).attr('fill','#ccc');
-      rightEnt.append('text').attr('text-anchor','middle').attr('fill','black').style('font-size','12px');
-      rightGrp.merge(rightEnt).select('circle');
-      rightGrp.merge(rightEnt).select('text')
-        .attr('x',cardW-40).attr('y',cardH-25)
-        .text(d=>mode==='players'?d.mostPlayedGame:d.unique);
-
-      // Update title
-      d3.select('#pageTitle').text(mode==='players'? 'Player Stats':'Top 5 Games');
+      if (!pawnEl.empty() && pawnPositionMap[playerName]) {
+        const { x: px, y: py } = pawnPositionMap[playerName];
+        pawnEl.transition().duration(200)
+          .attr('width', 45)
+          .attr('height', 45)
+          .attr('x', px - 22.5)
+          .attr('y', py - 22.5);
+      }
     }
 
-    /* ---------- Button listeners ---------- */
-    document.getElementById('blueButton').onclick=()=>render('players');
-    document.getElementById('redButton').onclick=()=>render('games');
+    function removeHoverEffects(cardEl, pawnEl, playerName) {
+      const card = d3.select(cardEl);
+      const x = +card.attr('data-x');
+      const y = +card.attr('data-y');
+
+      card.transition().duration(200)
+        .attr('transform', `translate(${x}, ${y}) scale(1)`);
+
+      if (!pawnEl.empty() && pawnPositionMap[playerName]) {
+        const { x: px, y: py } = pawnPositionMap[playerName];
+        pawnEl.transition().duration(200)
+          .attr('width', 30)
+          .attr('height', 30)
+          .attr('x', px - 15)
+          .attr('y', py - 15);
+      }
+    }
+
+
+    function render(mode) {
+      // Title
+      d3.select('#pageTitle').text(mode === 'players' ? 'Player Stats' : 'Top 5 Games');
+
+      const board = document.getElementById("board");
+      const boardRect = board?.getBoundingClientRect?.() || { width: window.innerWidth, height: window.innerHeight };
+      const boardWidth = boardRect.width;
+      const boardHeight = boardRect.height;
+
+      const maxCards = 5;
+      const margin = 40;
+      const availableWidth = boardWidth - margin * 2;
+      const cardW = Math.min(180, availableWidth / maxCards - 10);
+      const cardH = cardW * 1.45;
+      const spacing = cardW * 1.4;
+      const yStart = boardHeight - cardH - 300;
+      const svgW = boardWidth;
+      const svgH = boardHeight;
+
+      const container = d3.select('#cards-container').html('');
+      const dataArr = mode === 'players' ? playerData : gameData;
+      const startX = (svgW - (dataArr.length - 1) * spacing - cardW) / 2;
+
+      const svg = container.append('svg')
+        .attr('width', svgW)
+        .attr('height', svgH)
+        .style('position', 'absolute')
+        .style('top', 0)
+        .style('left', 0);
+
+      // Update dynamic path width
+      pathEndX = boardWidth - 330;
+      pathWidth = pathEndX - pathStartX;
+
+      // Always draw the curved path under the river
+      drawParabolaPath(svg);
+
+      // Draw player pawns on the curve (independent of mode)
+      if (playerData.length > 0) {
+        const maxWins = d3.max(playerData, d => d.wins) || 1;
+        const maxWinNorm = maxWins * 1.1;
+
+        const pawnGroup = svg.append('g').attr('class', 'pawns');
+
+        playerData.forEach((player, i) => {
+          const t = player.wins / maxWinNorm;
+          const x = pathStartX + t * pathWidth;
+          const y = (1 - t) * (1 - t) * pathStartY
+                  + 2 * (1 - t) * t * pathControlY
+                  + t * t * pathEndY;
+          pawnPositionMap[player.name] = { x, y };
+          const safeName = player.name.replace(/\s+/g, '');
+
+          pawnGroup.append('image')
+            .attr('href', playerPawnMap[player.name])
+            .attr('x', x - 15)
+            .attr('y', y - 15)
+            .attr('width', 30)
+            .attr('height', 30)
+            .attr('id', `pawn-${safeName}`)
+            .on('mouseenter', function () {
+              d3.select(this)
+                .transition().duration(200)
+                .attr('width', 45)
+                .attr('height', 45)
+                .attr('x', x - 22.5)
+                .attr('y', y - 22.5);
+
+              d3.select(`#card-${safeName}`)
+                .transition().duration(200)
+                .attr('transform', `translate(${startX + i * spacing},${yStart - 10}) scale(1.05)`);
+            })
+            .on('mouseleave', function () {
+              d3.select(this)
+                .transition().duration(200)
+                .attr('width', 30)
+                .attr('height', 30)
+                .attr('x', x - 15)
+                .attr('y', y - 15);
+
+              d3.select(`#card-${safeName}`)
+                .transition().duration(200)
+                .attr('transform', `translate(${startX + i * spacing},${yStart}) scale(1)`);
+            });
+        });
+
+        // Optional debug markers:
+        svg.append('circle')
+          .attr('cx', pathStartX)
+          .attr('cy', pathStartY)
+          .attr('r', 4)
+          .attr('fill', 'lime');
+
+        svg.append('circle')
+          .attr('cx', pathEndX)
+          .attr('cy', pathEndY)
+          .attr('r', 4)
+          .attr('fill', 'orange');
+      }
+      
+      const cards = svg.selectAll('g.card').data(dataArr, d => d.name);
+      cards.exit().remove();
+      const enter = cards.enter().append('g')
+        .attr('class', 'card')
+        .on('mouseover', function (event, d) {
+          const pawn = d3.select(`#pawn-${sanitizeName(d.name)}`);
+          applyHoverEffects(this, pawn, d.name);
+        })
+        .on('mouseout', function (event, d) {
+          const pawn = d3.select(`#pawn-${sanitizeName(d.name)}`);
+          removeHoverEffects(this, pawn, d.name);
+        });
+      const merged = enter.merge(cards)
+        .attr('transform', (d, i) => `translate(${startX + i * spacing},${yStart})`)
+        .each(function (d, i) {
+          const x = startX + i * spacing;
+          const y = yStart;
+          d3.select(this).attr('data-x', x).attr('data-y', y);
+        })
+        .attr('id', d => `card-${d.name.replace(/\s+/g, '')}`)
+
+
+      // Background
+      merged.selectAll('rect.bg').data(d => [d]).join(
+        enter => enter.append('rect').attr('class', 'bg')
+          .attr('rx', 20).attr('ry', 20)
+          .attr('width', cardW).attr('height', cardH)
+          .attr('fill', mode === 'players' ? '#0055cc' : '#cc0000')
+          .attr('stroke', '#999').attr('stroke-width', 3),
+        update => update.transition().duration(400)
+          .attr('fill', mode === 'players' ? '#0055cc' : '#cc0000')
+      );
+
+      merged.selectAll('g.imgWrap').data(d => [d]).join(
+        enter => {
+          const wrap = enter.append('g').attr('class', 'imgWrap');
+          
+          wrap.append('rect')
+            .attr('x', 15)
+            .attr('y', cardH * 0.13)  
+            .attr('width', cardW - 30)
+            .attr('height', cardH * 0.28)
+            .attr('fill', '#fff')
+            .attr('rx', 10)
+            .attr('ry', 10);
+
+          wrap.append('image')
+            .attr('x', 15 + (cardW - 30 - 48) / 2)
+            .attr('y', cardH * 0.13 + 10)
+            .attr('width', 48)
+            .attr('height', 48)
+            .attr('href', d => d.type === "player" ? playerPawnMap[d.name] : '');
+
+          return wrap;
+        }
+      );
+
+
+      // Top-left badge group
+      const topGrp = merged.selectAll('g.top').data(d => [d]);
+      const topEnter = topGrp.enter().append('g')
+      .attr('class', 'top')
+      .attr('transform', 'translate(2, 16)');
+
+      topEnter.append('text')
+        .attr('x', 25)
+        .attr('y', -6)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#fff')
+        .style('font-size', '10px')
+        .style('font-weight', 'bold')
+        .style('text-transform', 'uppercase')
+        .text(d => mode === 'players' ? 'WINS' : 'POSITIE');
+
+      topEnter.append('clipPath')
+        .attr('id', (d, i) => `clip-top-${i}`)
+        .append('circle')
+        .attr('r', 25)
+        .attr('cx', 25)
+        .attr('cy', 25);
+
+      topEnter.append('circle')
+      .attr('r', 25)
+      .attr('cx', 25)
+      .attr('cy', 25)
+      .attr('fill', d => mode === 'games' ? 'white' : 'none')
+      .attr('stroke', '#999')
+      .attr('stroke-width', 1.5);
+
+      topEnter.append('image')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', 50)
+        .attr('height', 50)
+        .attr('clip-path', (d, i) => `url(#clip-top-${i})`)
+        .attr('href', d => mode === 'players' ? 'assets/trophy.png' : 'assets/medal.png');
+      
+      topEnter.append('text')
+        .attr('x', 25)
+        .attr('y', 34)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#000')
+        .style('font-size', '14px')
+        .style('font-weight', 'bold');
+
+      topGrp.merge(topEnter).selectAll('text')
+        .filter((d, i, nodes) => d3.select(nodes[i]).attr('y') === '34')
+        .text(d => mode === 'players' ? d.wins : `#${dataArr.indexOf(d) + 1}`);
+
+      // Name bar
+      merged.selectAll('rect.nameBar').data(d => [d]).join(
+        enter => enter.append('rect')
+          .attr('class', 'nameBar')
+          .attr('x', 15)
+          .attr('y', cardH * 0.45)
+          .attr('width', cardW - 30)
+          .attr('height', 40)
+          .attr('rx', 8)
+          .attr('ry', 8)
+          .attr('fill', '#ddd')
+      );
+      merged.selectAll('text.nameText').data(d => [d]).join(
+        enter => enter.append('text')
+          .attr('class', 'nameText')
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'black')
+          .style('font-weight', 'bold')
+          .style('font-size', '14px')
+      ).attr('x', cardW / 2)
+        .attr('y', cardH * 0.45 + 26)
+        .text(d => d.name);
+
+      // Description box
+      merged.selectAll('path.descBG').data(d => [d]).join(
+        enter => enter.append('path')
+          .attr('class', 'descBG')
+          .attr('d', `M15,${cardH * 0.61} h${cardW - 30} a10,10 0 0 1 10,10 v45 a10,10 0 0 1 -10,10 h-${cardW - 30} a10,10 0 0 1 -10,-10 v-45 a10,10 0 0 1 10,-10`)
+          .attr('fill', '#bbb')
+      );
+
+      // Description text
+      merged.selectAll('text.desc').data(d => [d]).join(
+        enter => enter.append('text')
+          .attr('class', 'desc')
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'black')
+          .style('font-size', '11px')
+      ).attr('x', cardW / 2)
+        .attr('y', cardH * 0.64)
+        .selectAll('tspan')
+        .data(d => {
+          if (mode === 'players') return d.rival.match(/.{1,26}(?:\s|$)/g);
+          return [`Plays: ${d.plays}`, `Unique: ${d.unique}`];
+        }).join(
+          enter => enter.append('tspan'),
+          update => update,
+          exit => exit.remove()
+        ).attr('x', cardW / 2)
+          .attr('dy', (d, i) => i === 0 ? 0 : 14)
+          .text(t => t.trim());
+
+      // Bottom left circle
+      const leftGrp = merged.selectAll('g.left').data(d => [d]);
+      const leftEnt = leftGrp.enter().append('g').attr('class', 'left');
+
+      // ClipPath for round icon
+      leftEnt.append('clipPath')
+        .attr('id', (d, i) => `clip-left-${i}`)
+        .append('circle')
+        .attr('r', 25)
+        .attr('cx', 40)
+        .attr('cy', cardH - 40);
+
+      // Background icon
+      leftEnt.append('image')
+        .attr('x', 15)
+        .attr('y', cardH - 65)
+        .attr('width', 50)
+        .attr('height', 50)
+        .attr('clip-path', (d, i) => `url(#clip-left-${i})`)
+        .attr('href', 'assets/boardgame-icon.png');
+
+      // Border circle
+      leftEnt.append('circle')
+        .attr('r', 25)
+        .attr('cx', 40)
+        .attr('cy', cardH - 40)
+        .attr('fill', 'none')
+        .attr('stroke', '#999')
+        .attr('stroke-width', 1.5);
+
+      // Number in the circle
+      leftEnt.append('text')
+        .attr('x', 40)
+        .attr('y', cardH - 35)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'black')
+        .style('font-size', '13px')
+        .text(d => mode === 'players' ? d.unique : d.plays);
+
+      // Label underneath
+      leftEnt.append('text')
+        .attr('x', 40)
+        .attr('y', cardH - 5)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#fff')
+        .style('font-size', '9px')
+        .style('font-weight', 'bold')
+        .style('text-transform', 'uppercase')
+        .text(mode === 'players' ? 'SPELLEN' : 'POTJES');
+
+      // Bottom right circle
+      const rightGrp = merged.selectAll('g.right').data(d => [d]);
+      const rightEnt = rightGrp.enter().append('g').attr('class', 'right');
+
+      // Coordinates
+      const rightCX = cardW - 40;
+      const rightCY = cardH - 40;
+
+      // White circle for game mode, grey otherwise
+      rightEnt.append('circle')
+        .attr('r', 25)
+        .attr('cx', rightCX)
+        .attr('cy', rightCY)
+        .attr('fill', d => mode === 'games' ? 'white' : '#ccc');
+
+      // Overlay icon only for game mode
+      rightEnt.append('image')
+        .filter(d => mode === 'games')
+        .attr('x', rightCX - 25)
+        .attr('y', rightCY - 25)
+        .attr('width', 50)
+        .attr('height', 50)
+        .attr('href', 'assets/spelers-icon.png');
+
+      // Text inside the circle
+      rightEnt.append('text')
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'black')
+        .style('font-size', d => mode === 'games' ? '14px' : '11px')
+        .style('font-weight', d => mode === 'games' ? 'bold' : 'normal');
+
+      rightGrp.merge(rightEnt).select('text')
+        .attr('x', rightCX)
+        .attr('y', rightCY + 5)
+        .text(d => mode === 'players' ? d.mostPlayedGame : d.unique);
+
+      // Label below the circle for games
+      rightEnt.append('text')
+        .filter(d => mode === 'games')
+        .attr('x', rightCX - 10)
+        .attr('y', rightCY + 35)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#fff')
+        .style('font-size', '9px')
+        .style('font-weight', 'bold')
+        .style('text-transform', 'uppercase')
+        .text('UNIEKE SPELERS');
+
+      // Mark start and end of path for debugging (optional)
+      svg.append('circle')
+        .attr('cx', pathStartX)
+        .attr('cy', pathBaseY + Math.pow((0 - 0.5) * 2, 2) * curveAmplitude)
+        .attr('r', 4)
+        .attr('fill', 'lime');
+
+      svg.append('circle')
+        .attr('cx', pathEndX)
+        .attr('cy', pathBaseY + Math.pow((1 - 0.5) * 2, 2) * curveAmplitude)
+        .attr('r', 4)
+        .attr('fill', 'orange');
+    }
+
+    document.getElementById('blueButton').onclick = () => {
+      mode = 'players';
+      render(mode);
+    };
+
+    document.getElementById('redButton').onclick = () => {
+      mode = 'games';
+      render(mode);
+    };
   </script>
 </body>
 </html>
