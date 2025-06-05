@@ -3,7 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <title>Game Visualisation</title>
-  <link rel="stylesheet" href="stylesheets/boardgame.css">
+  <style>
+    body {
+      margin: 0;
+      background: url('assets/wood-texture.jpg') repeat center center;
+      color: white;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    h1 {
+      text-align: center;
+      margin-top: 10px;
+    }
+    #board {
+      background: url('assets/boardv2.jpg') no-repeat center center;
+      background-size: contain;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    #cards-container {
+      position: absolute;
+      top: 6%;
+      left: 0;
+    }
+
+    .image-button {
+      position: fixed;
+      bottom: 20px;
+      width: 190px;
+      height: auto;
+      cursor: pointer;
+      z-index: 10;
+    }
+
+    #blueButton {
+      left: 55px;
+    }
+
+    #redButton {
+      right: 55px;
+    }
+
+    .color-button {
+      position: fixed;
+      bottom: 20px;
+      padding: 10px 24px;
+      font-size: 16px;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      z-index: 10;
+    }
+  </style>
 </head>
 <body>
   <div id="board">
@@ -15,8 +68,6 @@
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
-    let mode = 'players';
-
     const params = new URLSearchParams(location.search);
     const selectedPlayers = params.get("players") ? JSON.parse(params.get("players")) : [];
     const pawnImages = [
@@ -35,7 +86,7 @@
     const pathEndY = 50;     // This is higher on screen than startY
     const pathControlY = 500; // Peak of the parabola
 
-    function drawParabolaPath(svg, pathControlY) {
+    function drawParabolaPath(svg) {
       const path = d3.path();
       path.moveTo(pathStartX, pathStartY);
       path.quadraticCurveTo((pathStartX + pathEndX) / 2, pathControlY, pathEndX, pathEndY);
@@ -145,47 +196,35 @@ selectedPlayers.forEach((p, i) => {
 
     const pawnPositionMap = {}; // name → { x, y }
 
-    function applyHoverEffects(cardEl, pawnEl, playerName) {
-      const card = d3.select(cardEl);
-      const x = +card.attr('data-x');
-      const y = +card.attr('data-y');
-
-      card.transition().duration(200)
-        .attr('transform', `translate(${x}, ${y - 10}) scale(1.05)`);
+    function applyHoverEffects(cardEl, pawnEl, playerName, cardX, yStart) {
+      cardEl.transition().duration(200)
+        .attr('transform', `translate(${cardX} - 50,${yStart - 150}) scale(1.5)`);
 
       if (!pawnEl.empty() && pawnPositionMap[playerName]) {
-        const { x: px, y: py } = pawnPositionMap[playerName];
+        const { x, y } = pawnPositionMap[playerName];
         pawnEl.transition().duration(200)
-          .attr('width', 45)
-          .attr('height', 45)
-          .attr('x', px - 22.5)
-          .attr('y', py - 22.5);
+          .attr('width', 45*2)
+          .attr('height', 45*2)
+          .attr('x', x - 22.5*2)
+          .attr('y', y - 22.5*2);
       }
     }
 
-    function removeHoverEffects(cardEl, pawnEl, playerName) {
-      const card = d3.select(cardEl);
-      const x = +card.attr('data-x');
-      const y = +card.attr('data-y');
-
-      card.transition().duration(200)
-        .attr('transform', `translate(${x}, ${y}) scale(1)`);
+    function removeHoverEffects(cardEl, pawnEl, playerName, cardX, yStart) {
+      cardEl.transition().duration(200)
+        .attr('transform', `translate(${cardX},${yStart}) scale(1)`);
 
       if (!pawnEl.empty() && pawnPositionMap[playerName]) {
-        const { x: px, y: py } = pawnPositionMap[playerName];
+        const { x, y } = pawnPositionMap[playerName];
         pawnEl.transition().duration(200)
           .attr('width', 30)
           .attr('height', 30)
-          .attr('x', px - 15)
-          .attr('y', py - 15);
+          .attr('x', x - 15)
+          .attr('y', y - 15);
       }
     }
 
-
     function render(mode) {
-      // Title
-      d3.select('#pageTitle').text(mode === 'players' ? 'Player Stats' : 'Top 5 Games');
-
       const board = document.getElementById("board");
       const boardRect = board?.getBoundingClientRect?.() || { width: window.innerWidth, height: window.innerHeight };
       const boardWidth = boardRect.width;
@@ -197,13 +236,13 @@ selectedPlayers.forEach((p, i) => {
       const cardW = Math.min(180, availableWidth / maxCards - 10);
       const cardH = cardW * 1.45;
       const spacing = cardW * 1.4;
+      const yStart = boardHeight - cardH - 300;
       const svgW = boardWidth;
       const svgH = boardHeight;
 
       const container = d3.select('#cards-container').html('');
-      const yStart = boardHeight * 0.4; // 60% down the screen
       const dataArr = mode === 'players' ? playerData : gameData;
-      const startX = (boardWidth - (dataArr.length - 1) * spacing - cardW) / 2;
+      const startX = (svgW - (dataArr.length - 1) * spacing - cardW) / 2;
 
       const svg = container.append('svg')
         .attr('width', svgW)
@@ -217,7 +256,7 @@ selectedPlayers.forEach((p, i) => {
       pathWidth = pathEndX - pathStartX;
 
       // Always draw the curved path under the river
-      drawParabolaPath(svg, boardHeight * 0.55);
+      drawParabolaPath(svg);
 
       // Draw player pawns on the curve (independent of mode)
       if (playerData.length > 0) {
@@ -230,25 +269,25 @@ selectedPlayers.forEach((p, i) => {
           const t = player.wins / maxWinNorm;
           const x = pathStartX + t * pathWidth;
           const y = (1 - t) * (1 - t) * pathStartY
-                  + 2 * (1 - t) * t * boardHeight * 0.55
+                  + 2 * (1 - t) * t * pathControlY
                   + t * t * pathEndY;
           pawnPositionMap[player.name] = { x, y };
           const safeName = player.name.replace(/\s+/g, '');
 
           pawnGroup.append('image')
             .attr('href', playerPawnMap[player.name])
-            .attr('x', x - 20)
-            .attr('y', y - 50)
-            .attr('width', 60)
-            .attr('height', 60)
+            .attr('x', x - 15)
+            .attr('y', y - 15)
+            .attr('width', 30)
+            .attr('height', 30)
             .attr('id', `pawn-${safeName}`)
             .on('mouseenter', function () {
               d3.select(this)
                 .transition().duration(200)
-                .attr('width', 120)
-                .attr('height', 120)
-                .attr('x', x - 50)
-                .attr('y', y - 100);
+                .attr('width', 45)
+                .attr('height', 45)
+                .attr('x', x - 22.5)
+                .attr('y', y - 22.5);
 
               d3.select(`#card-${safeName}`)
                 .transition().duration(200)
@@ -257,10 +296,10 @@ selectedPlayers.forEach((p, i) => {
             .on('mouseleave', function () {
               d3.select(this)
                 .transition().duration(200)
-                .attr('x', x - 20)
-                .attr('y', y - 50)
-                .attr('width', 60)
-                .attr('height', 60);
+                .attr('width', 30)
+                .attr('height', 30)
+                .attr('x', x - 15)
+                .attr('y', y - 15);
 
               d3.select(`#card-${safeName}`)
                 .transition().duration(200)
@@ -284,25 +323,24 @@ selectedPlayers.forEach((p, i) => {
       
       const cards = svg.selectAll('g.card').data(dataArr, d => d.name);
       cards.exit().remove();
-      const enter = cards.enter().append('g')
-        .attr('class', 'card')
-        .on('mouseover', function (event, d) {
-          const pawn = d3.select(`#pawn-${sanitizeName(d.name)}`);
-          applyHoverEffects(this, pawn, d.name);
-        })
-        .on('mouseout', function (event, d) {
-          const pawn = d3.select(`#pawn-${sanitizeName(d.name)}`);
-          removeHoverEffects(this, pawn, d.name);
-        });
+      const enter = cards.enter().append('g').attr('class', 'card');
       const merged = enter.merge(cards)
         .attr('transform', (d, i) => `translate(${startX + i * spacing},${yStart})`)
-        .each(function (d, i) {
-          const x = startX + i * spacing;
-          const y = yStart;
-          d3.select(this).attr('data-x', x).attr('data-y', y);
-        })
         .attr('id', d => `card-${d.name.replace(/\s+/g, '')}`)
-
+        .on('mouseenter', function (event, d) {
+          const safeName = d.name.replace(/\s+/g, '');
+          const cardEl = d3.select(`#card-${safeName}`);
+          const pawnEl = d3.select(`#pawn-${safeName}`);
+          const x = parseFloat(cardEl.attr("transform").match(/translate\(([\d.]+)/)[1]);
+          applyHoverEffects(cardEl, pawnEl, d.name, x, yStart);
+        })
+        .on('mouseleave', function (event, d) {
+          const safeName = d.name.replace(/\s+/g, '');
+          const cardEl = d3.select(`#card-${safeName}`);
+          const pawnEl = d3.select(`#pawn-${safeName}`);
+          const x = parseFloat(cardEl.attr("transform").match(/translate\(([\d.]+)/)[1]);
+          removeHoverEffects(cardEl, pawnEl, d.name, x, yStart);
+        });
 
       // Background
       merged.selectAll('rect.bg').data(d => [d]).join(
@@ -555,15 +593,11 @@ selectedPlayers.forEach((p, i) => {
         .attr('fill', 'orange');
     }
 
-    document.getElementById('blueButton').onclick = () => {
-      mode = 'players';
-      render(mode);
-    };
+    // Title
+    d3.select('#pageTitle').text(mode === 'players' ? 'Player Stats' : 'Top 5 Games');
 
-    document.getElementById('redButton').onclick = () => {
-      mode = 'games';
-      render(mode);
-    };
+    document.getElementById('blueButton').onclick = () => render('players');
+    document.getElementById('redButton').onclick = () => render('games');
   </script>
 </body>
 </html>
