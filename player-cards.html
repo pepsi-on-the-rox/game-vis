@@ -30,7 +30,7 @@
 
     .image-button {
       position: fixed;
-      bottom: 20px;
+      top: 20px;
       width: 190px;
       height: auto;
       cursor: pointer;
@@ -88,7 +88,7 @@
     const pathEndY = 50;     // This is higher on screen than startY
     const pathControlY = 500; // Peak of the parabola
 
-    function drawParabolaPath(svg) {
+    function drawParabolaPath(svg, pathControlY) {
       const path = d3.path();
       path.moveTo(pathStartX, pathStartY);
       path.quadraticCurveTo((pathStartX + pathEndX) / 2, pathControlY, pathEndX, pathEndY);
@@ -250,13 +250,13 @@ selectedPlayers.forEach((p, i) => {
       const cardW = Math.min(180, availableWidth / maxCards - 10);
       const cardH = cardW * 1.45;
       const spacing = cardW * 1.4;
-      const yStart = boardHeight - cardH - 300;
       const svgW = boardWidth;
       const svgH = boardHeight;
 
       const container = d3.select('#cards-container').html('');
+      const yStart = boardHeight * 0.4; // 60% down the screen
       const dataArr = mode === 'players' ? playerData : gameData;
-      const startX = (svgW - (dataArr.length - 1) * spacing - cardW) / 2;
+      const startX = (boardWidth - (dataArr.length - 1) * spacing - cardW) / 2;
 
       const svg = container.append('svg')
         .attr('width', svgW)
@@ -270,7 +270,7 @@ selectedPlayers.forEach((p, i) => {
       pathWidth = pathEndX - pathStartX;
 
       // Always draw the curved path under the river
-      drawParabolaPath(svg);
+      drawParabolaPath(svg, boardHeight * 0.55);
 
       // Draw player pawns on the curve (independent of mode)
       if (playerData.length > 0) {
