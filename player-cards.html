@@ -3,60 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Game Visualisation</title>
-  <style>
-    body {
-      margin: 0;
-      background: url('assets/wood-texture.jpg') repeat center center;
-      color: white;
-      font-family: Arial, sans-serif;
-      overflow: hidden;
-    }
-    h1 {
-      text-align: center;
-      margin-top: 10px;
-    }
-    #board {
-      background: url('assets/boardv2.jpg') no-repeat center center;
-      background-size: contain;
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-    }
-    #cards-container {
-      position: absolute;
-      top: 6%;
-      left: 0;
-    }
-
-    .image-button {
-      position: fixed;
-      top: 20px;
-      width: 190px;
-      height: auto;
-      cursor: pointer;
-      z-index: 10;
-    }
-
-    #blueButton {
-      left: 55px;
-    }
-
-    #redButton {
-      right: 55px;
-    }
-
-    .color-button {
-      position: fixed;
-      bottom: 20px;
-      padding: 10px 24px;
-      font-size: 16px;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      z-index: 10;
-    }
-  </style>
+  <link rel="stylesheet" href="stylesheets/boardgame.css">
 </head>
 <body>
   <div id="board">
