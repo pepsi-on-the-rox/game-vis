@@ -5,6 +5,7 @@
   <title>Game Visualisation</title>
   <link rel="stylesheet" href="stylesheets/boardgame.css">
 </head>
+<button id="backToStartBtn">← Terug naar Start</button>
 <body>
   <div id="board">
     <h1 id="pageTitle">Player Stats</h1>
@@ -12,6 +13,9 @@
   </div>
   <img id="blueButton" src="assets/deck-speler.png" class="image-button" alt="Player Stats">
   <img id="redButton" src="assets/deck-spel.png" class="image-button" alt="Game Stats">
+
+  <div id="tooltip" class="tooltip"></div>
+
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
@@ -212,6 +216,21 @@ selectedPlayers.forEach((p, i) => {
         .style('top', 0)
         .style('left', 0);
 
+      const tooltip = d3.select("#tooltip");
+
+      function showTooltip(text, evt) {
+        const [x, y] = d3.pointer(evt);
+        tooltip
+          .style("opacity", 1)
+          .html(text)
+          .style("left", (evt.pageX + 10) + "px")
+          .style("top", (evt.pageY + 10) + "px");
+      }
+
+      function hideTooltip() {
+        tooltip.style("opacity", 0);
+      }
+      
       // Update dynamic path width
       pathEndX = boardWidth - 330;
       pathWidth = pathEndX - pathStartX;
@@ -340,55 +359,52 @@ selectedPlayers.forEach((p, i) => {
       );
 
 
-      // Top-left badge group
+      // Top-left circle
       const topGrp = merged.selectAll('g.top').data(d => [d]);
       const topEnter = topGrp.enter().append('g')
-      .attr('class', 'top')
-      .attr('transform', 'translate(2, 16)');
-
-      topEnter.append('text')
-        .attr('x', 25)
-        .attr('y', -6)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#fff')
-        .style('font-size', '10px')
-        .style('font-weight', 'bold')
-        .style('text-transform', 'uppercase')
-        .text(d => mode === 'players' ? 'WINS' : 'POSITIE');
+        .attr('class', 'top')
+        .attr('transform', 'translate(2, 16)')
+        .on('mouseover', function(event, d) {
+          showTooltip(mode === 'players' ? 'Totaal aantal gewonnen potjes van speler' : 'Ranking van meest gespeelde bordspellen', event);
+        })
+        .on('mouseout', function() {
+          hideTooltip();
+        });
 
       topEnter.append('clipPath')
         .attr('id', (d, i) => `clip-top-${i}`)
         .append('circle')
         .attr('r', 25)
-        .attr('cx', 25)
-        .attr('cy', 25);
+        .attr('cx', 30)
+        .attr('cy', 15);
 
       topEnter.append('circle')
       .attr('r', 25)
-      .attr('cx', 25)
-      .attr('cy', 25)
-      .attr('fill', d => mode === 'games' ? 'white' : 'none')
+      .attr('cx', 30)
+      .attr('cy', 15)
+      .attr('fill', d => mode === 'games' ? 'white' : 'white')
       .attr('stroke', '#999')
       .attr('stroke-width', 1.5);
 
       topEnter.append('image')
-        .attr('x', 0)
-        .attr('y', 0)
+        .attr('x', 5)
+        .attr('y', -10)
         .attr('width', 50)
         .attr('height', 50)
         .attr('clip-path', (d, i) => `url(#clip-top-${i})`)
-        .attr('href', d => mode === 'players' ? 'assets/trophy.png' : 'assets/medal.png');
+        .attr('href', d => mode === 'players' ? 'assets/trophy.png' : 'assets/medal.png')
+        .attr('opacity', 0.5);
       
       topEnter.append('text')
-        .attr('x', 25)
-        .attr('y', 34)
+        .attr('x', 30)
+        .attr('y', 20)
         .attr('text-anchor', 'middle')
         .attr('fill', '#000')
         .style('font-size', '14px')
         .style('font-weight', 'bold');
 
       topGrp.merge(topEnter).selectAll('text')
-        .filter((d, i, nodes) => d3.select(nodes[i]).attr('y') === '34')
+        .filter((d, i, nodes) => d3.select(nodes[i]).attr('y') === '20')
         .text(d => mode === 'players' ? d.wins : `#${dataArr.indexOf(d) + 1}`);
 
       // Name bar
@@ -430,7 +446,7 @@ selectedPlayers.forEach((p, i) => {
           .attr('fill', 'black')
           .style('font-size', '11px')
       ).attr('x', cardW / 2)
-        .attr('y', cardH * 0.64)
+        .attr('y', cardH * 0.72)
         .selectAll('tspan')
         .data(d => {
           if (mode === 'players') return d.rival.match(/.{1,26}(?:\s|$)/g);
@@ -445,77 +461,84 @@ selectedPlayers.forEach((p, i) => {
 
       // Bottom left circle
       const leftGrp = merged.selectAll('g.left').data(d => [d]);
-      const leftEnt = leftGrp.enter().append('g').attr('class', 'left');
+      const leftEnt = leftGrp.enter().append('g')
+        .attr('class', 'left')
+        .on('mouseover', function(event, d) {
+          showTooltip(mode === 'players' ? 'Totaal aantal unieke bordspellen die speler gespeeld heeft.' : 'Totaal aantal potjes gespeeld.', event);
+        })
+        .on('mouseout', function() {
+          hideTooltip();
+        });
 
       // ClipPath for round icon
       leftEnt.append('clipPath')
         .attr('id', (d, i) => `clip-left-${i}`)
         .append('circle')
         .attr('r', 25)
-        .attr('cx', 40)
-        .attr('cy', cardH - 40);
-
-      // Background icon
-      leftEnt.append('image')
-        .attr('x', 15)
-        .attr('y', cardH - 65)
-        .attr('width', 50)
-        .attr('height', 50)
-        .attr('clip-path', (d, i) => `url(#clip-left-${i})`)
-        .attr('href', 'assets/boardgame-icon.png');
+        .attr('cx', 30)
+        .attr('cy', cardH - 30);
 
       // Border circle
       leftEnt.append('circle')
         .attr('r', 25)
-        .attr('cx', 40)
-        .attr('cy', cardH - 40)
+        .attr('cx', 30)
+        .attr('cy', cardH - 30)
         .attr('fill', 'none')
         .attr('stroke', '#999')
+        .attr('fill', 'white')
         .attr('stroke-width', 1.5);
+
+      // Background icon
+      leftEnt.append('image')
+        .attr('x', 5)
+        .attr('y', cardH - 55)
+        .attr('width', 50)
+        .attr('height', 50)
+        .attr('clip-path', (d, i) => `url(#clip-left-${i})`)
+        .attr('href', 'assets/boardgame-icon.png')
+        .attr('opacity', 0.5);
 
       // Number in the circle
       leftEnt.append('text')
-        .attr('x', 40)
-        .attr('y', cardH - 35)
+        .attr('x', 30)
+        .attr('y', cardH - 25)
         .attr('text-anchor', 'middle')
         .attr('fill', 'black')
         .style('font-size', '13px')
-        .text(d => mode === 'players' ? d.unique : d.plays);
-
-      // Label underneath
-      leftEnt.append('text')
-        .attr('x', 40)
-        .attr('y', cardH - 5)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#fff')
-        .style('font-size', '9px')
         .style('font-weight', 'bold')
-        .style('text-transform', 'uppercase')
-        .text(mode === 'players' ? 'SPELLEN' : 'POTJES');
+        .text(d => mode === 'players' ? d.unique : d.plays);
 
       // Bottom right circle
       const rightGrp = merged.selectAll('g.right').data(d => [d]);
-      const rightEnt = rightGrp.enter().append('g').attr('class', 'right');
+      const rightEnt = rightGrp.enter().append('g')
+        .attr('class', 'right')
+        .on('mouseover', function(event, d) {
+          showTooltip(mode === 'players' ? 'Meest gespeelde spel van speler' : 'Totaal aantal unieke spelers die het spel gespeeld.', event);
+        })
+        .on('mouseout', function() {
+          hideTooltip();
+        });
 
       // Coordinates
-      const rightCX = cardW - 40;
-      const rightCY = cardH - 40;
+      const rightCX = cardW - 30;
+      const rightCY = cardH - 30;
 
       // White circle for game mode, grey otherwise
       rightEnt.append('circle')
         .attr('r', 25)
         .attr('cx', rightCX)
         .attr('cy', rightCY)
-        .attr('fill', d => mode === 'games' ? 'white' : '#ccc');
+        .attr('fill', 'white');
 
       // Overlay icon only for game mode
       rightEnt.append('image')
         .filter(d => mode === 'games')
         .attr('x', rightCX - 25)
-        .attr('y', rightCY - 25)
+        .attr('y', rightCY - 15)
         .attr('width', 50)
         .attr('height', 50)
-        .attr('href', 'assets/spelers-icon.png');
+        .attr('href', 'assets/spelers-icon.png')
+        .attr('opacity', 0.5);
 
       // Text inside the circle
       rightEnt.append('text')
@@ -526,20 +549,8 @@ selectedPlayers.forEach((p, i) => {
 
       rightGrp.merge(rightEnt).select('text')
         .attr('x', rightCX)
-        .attr('y', rightCY + 5)
+        .attr('y', mode === 'games' ? rightCY : rightCY + 5)
         .text(d => mode === 'players' ? d.mostPlayedGame : d.unique);
-
-      // Label below the circle for games
-      rightEnt.append('text')
-        .filter(d => mode === 'games')
-        .attr('x', rightCX - 10)
-        .attr('y', rightCY + 35)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#fff')
-        .style('font-size', '9px')
-        .style('font-weight', 'bold')
-        .style('text-transform', 'uppercase')
-        .text('UNIEKE SPELERS');
 
       // Mark start and end of path for debugging (optional)
       svg.append('circle')
@@ -564,6 +575,10 @@ selectedPlayers.forEach((p, i) => {
       mode = 'games';
       render(mode);
     };
+
+    document.getElementById('backToStartBtn')?.addEventListener('click', () => {
+      window.location.href = 'index.html'; // of een andere startpagina
+    });
   </script>
 </body>
 </html>
