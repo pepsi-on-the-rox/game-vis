@@ -283,25 +283,25 @@ selectedPlayers.forEach((p, i) => {
           const t = player.wins / maxWinNorm;
           const x = pathStartX + t * pathWidth;
           const y = (1 - t) * (1 - t) * pathStartY
-                  + 2 * (1 - t) * t * pathControlY
+                  + 2 * (1 - t) * t * boardHeight * 0.55
                   + t * t * pathEndY;
           pawnPositionMap[player.name] = { x, y };
           const safeName = player.name.replace(/\s+/g, '');
 
           pawnGroup.append('image')
             .attr('href', playerPawnMap[player.name])
-            .attr('x', x - 15)
-            .attr('y', y - 15)
-            .attr('width', 30)
-            .attr('height', 30)
+            .attr('x', x - 20)
+            .attr('y', y - 50)
+            .attr('width', 60)
+            .attr('height', 60)
             .attr('id', `pawn-${safeName}`)
             .on('mouseenter', function () {
               d3.select(this)
                 .transition().duration(200)
-                .attr('width', 45)
-                .attr('height', 45)
-                .attr('x', x - 22.5)
-                .attr('y', y - 22.5);
+                .attr('width', 120)
+                .attr('height', 120)
+                .attr('x', x - 50)
+                .attr('y', y - 100);
 
               d3.select(`#card-${safeName}`)
                 .transition().duration(200)
@@ -310,10 +310,10 @@ selectedPlayers.forEach((p, i) => {
             .on('mouseleave', function () {
               d3.select(this)
                 .transition().duration(200)
-                .attr('width', 30)
-                .attr('height', 30)
-                .attr('x', x - 15)
-                .attr('y', y - 15);
+                .attr('x', x - 20)
+                .attr('y', y - 50)
+                .attr('width', 60)
+                .attr('height', 60);
 
               d3.select(`#card-${safeName}`)
                 .transition().duration(200)
